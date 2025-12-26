@@ -71,8 +71,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@Req() req: Request) {
-    const user = req.user as { sub: string; email: string; role: string }
-    return { user: { id: user.sub, email: user.email, role: user.role } }
+    const user = req.user as { id: string; email: string; role: string }
+    return { user: { id: user.id, email: user.email, role: user.role } }
   }
 
   private setRefreshCookie(
