@@ -1,4 +1,4 @@
-# CRUD Portfolio Manager (v0.5.0)
+# CRUD Portfolio Manager (v0.6.0)
 
 Monorepo scaffold with a Vite + React web app and a NestJS API.
 
@@ -30,6 +30,7 @@ Copy example env files and adjust if needed:
 - `COOKIE_SECURE` (`true`/`false`)
 - `MASTER_KEY_HEX` (64 hex chars, AES-256-GCM key)
 - `BINANCE_SPOT_BASE_URL` (optional, default `https://api.binance.com`)
+  - Use `https://testnet.binance.vision` for Spot testnet.
 
 ## Run database
 
@@ -80,6 +81,16 @@ pnpm dev
 - Credentials: `GET/PUT/DELETE http://localhost:4000/binance/credentials`
 - Test: `POST http://localhost:4000/binance/credentials/test`
 - UI: `http://localhost:5173/settings`
+
+## Binance Spot trading (v0.6.0)
+
+- Account: `GET http://localhost:4000/binance/spot/account`
+- Open orders: `GET http://localhost:4000/binance/spot/open-orders?symbol=BTCUSDT`
+- Place order: `POST http://localhost:4000/binance/spot/order`
+- Cancel order: `DELETE http://localhost:4000/binance/spot/order`
+- Query order: `GET http://localhost:4000/binance/spot/order?symbol=BTCUSDT&orderId=...`
+- UI: `http://localhost:5173/spot`
+- Note: for TRADE endpoints, enable trading permissions for the key in Binance API management.
 
 ## Troubleshooting
 

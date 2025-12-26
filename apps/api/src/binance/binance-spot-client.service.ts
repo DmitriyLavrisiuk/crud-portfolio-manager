@@ -1,0 +1,181 @@
+import { Injectable } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { randomUUID, createHmac } from 'node:crypto'
+
+import { BinanceService } from './binance.service'
+
+const DEFAULT_BINANCE_BASE_URL = 'https://api.binance.com'
+const DEFAULT_RECV_WINDOW = 5000
+
+type BinanceErrorPayload = {
+  code?: number
+  msg?: string
+}
+
+type SignedRequestParams = Record<string, string | number | undefined>
+
+@Injectable()
+export class BinanceSpotClientService {
+  constructor(
+    private configService: ConfigService,
+    private binanceService: BinanceService,
+  ) {}
+
+  async getServerTime() {
+    const response = await fetch(`${this.getBaseUrl()}/api/v3/time`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch Binance server time.')
+    }
+    const data = (await response.json()) as { serverTime?: number }
+    return typeof data.serverTime === 'number' ? data.serverTime : Date.now()
+  }
+
+  async getAccount(userId: string) {
+    const credentials = await this.getCredentials(userId)
+    const data = await this.signedRequest<{
+      accountType?: string
+      permissions?: string[]
+      balances?: Array<{ asset: string; free: string; locked: string }>
+    }>('GET', '/api/v3/account', credentials)
+
+    return {
+      accountType: data.accountType,
+      permissions: data.permissions,
+      balances: (data.balances ?? []).map((balance) => ({
+        asset: balance.asset,
+        free: balance.free,
+        locked: balance.locked,
+      })),
+    }
+  }
+
+  async placeOrder(
+    userId: string,
+    payload: {
+      symbol: string
+      side: 'BUY' | 'SELL'
+      type: 'MARKET' | 'LIMIT'
+      quantity?: string
+      quoteOrderQty?: string
+      price?: string
+      timeInForce?: 'GTC'
+    },
+  ) {
+    const credentials = await this.getCredentials(userId)
+    const params: SignedRequestParams = {
+      symbol: payload.symbol,
+      side: payload.side,
+      type: payload.type,
+      quantity: payload.quantity,
+      quoteOrderQty: payload.quoteOrderQty,
+      price: payload.price,
+      timeInForce: payload.timeInForce,
+      newClientOrderId: randomUUID(),
+    }
+
+    return this.signedRequest('POST', '/api/v3/order', credentials, params)
+  }
+
+  async cancelOrder(
+    userId: string,
+    payload: { symbol: string; orderId?: string; origClientOrderId?: string },
+  ) {
+    const credentials = await this.getCredentials(userId)
+    await this.signedRequest('DELETE', '/api/v3/order', credentials, payload)
+    return { ok: true }
+  }
+
+  async openOrders(userId: string, symbol: string) {
+    if (!symbol) {
+      throw new Error('Symbol is required for open orders.')
+    }
+    const credentials = await this.getCredentials(userId)
+    return this.signedRequest('GET', '/api/v3/openOrders', credentials, {
+      symbol,
+    })
+  }
+
+  async queryOrder(
+    userId: string,
+    payload: { symbol: string; orderId?: string; origClientOrderId?: string },
+  ) {
+    const credentials = await this.getCredentials(userId)
+    return this.signedRequest('GET', '/api/v3/order', credentials, payload)
+  }
+
+  private async getCredentials(userId: string) {
+    const credentials =
+      await this.binanceService.getDecryptedCredentials(userId)
+    if (!credentials) {
+      throw new Error('Binance keys not configured')
+    }
+    return credentials
+  }
+
+  private async signedRequest<T>(
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    credentials: { apiKey: string; apiSecret: string },
+    params: SignedRequestParams = {},
+  ): Promise<T> {
+    const timestamp = await this.getServerTime()
+    const recvWindow = params.recvWindow ?? DEFAULT_RECV_WINDOW
+    const queryParams = new URLSearchParams()
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined) return
+      queryParams.append(key, String(value))
+    })
+    queryParams.append('timestamp', String(timestamp))
+    queryParams.append('recvWindow', String(recvWindow))
+
+    const signature = createHmac('sha256', credentials.apiSecret)
+      .update(queryParams.toString())
+      .digest('hex')
+    const signedQuery = `${queryParams.toString()}&signature=${signature}`
+    const url = `${this.getBaseUrl()}${path}?${signedQuery}`
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'X-MBX-APIKEY': credentials.apiKey,
+      },
+    })
+
+    if (!response.ok) {
+      const message = await this.extractBinanceError(response)
+      throw new Error(message)
+    }
+
+    return (await response.json()) as T
+  }
+
+  private getBaseUrl() {
+    return (
+      this.configService.get<string>('BINANCE_SPOT_BASE_URL') ??
+      DEFAULT_BINANCE_BASE_URL
+    )
+  }
+
+  private async extractBinanceError(response: Response) {
+    try {
+      const data = (await response.json()) as BinanceErrorPayload
+      if (data?.code === -2015 || data?.code === -2014) {
+        return 'Invalid API key, IP restriction, or missing permissions.'
+      }
+      if (data?.msg) {
+        return this.sanitizeMessage(data.msg)
+      }
+    } catch {
+      // ignore JSON parsing errors
+    }
+
+    return `Binance request failed (${response.status}).`
+  }
+
+  private sanitizeMessage(message: string) {
+    return message
+      .replace(/(signature|apiKey|secret)=([^&\s]+)/gi, '$1=[redacted]')
+      .slice(0, 500)
+  }
+}

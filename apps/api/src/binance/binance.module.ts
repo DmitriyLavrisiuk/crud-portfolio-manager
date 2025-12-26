@@ -3,6 +3,8 @@ import { MongooseModule } from '@nestjs/mongoose'
 
 import { EncryptionService } from '../common/encryption.service'
 import { BinanceController } from './binance.controller'
+import { BinanceSpotController } from './binance-spot.controller'
+import { BinanceSpotClientService } from './binance-spot-client.service'
 import { BinanceService } from './binance.service'
 import {
   BinanceCredentials,
@@ -15,7 +17,7 @@ import {
       { name: BinanceCredentials.name, schema: BinanceCredentialsSchema },
     ]),
   ],
-  controllers: [BinanceController],
-  providers: [BinanceService, EncryptionService],
+  controllers: [BinanceController, BinanceSpotController],
+  providers: [BinanceService, BinanceSpotClientService, EncryptionService],
 })
 export class BinanceModule {}

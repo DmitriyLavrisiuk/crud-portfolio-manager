@@ -28,6 +28,21 @@ export class BinanceService {
     return this.binanceModel.findOne({ userId })
   }
 
+  async getDecryptedCredentials(userId: string) {
+    const credentials = await this.binanceModel.findOne({ userId })
+    if (!credentials) {
+      return null
+    }
+
+    const apiKey = this.encryptionService.decrypt(credentials.apiKeyEnc, userId)
+    const apiSecret = this.encryptionService.decrypt(
+      credentials.apiSecretEnc,
+      userId,
+    )
+
+    return { apiKey, apiSecret }
+  }
+
   async upsertCredentials(userId: string, apiKey: string, apiSecret: string) {
     const apiKeyEnc = this.encryptionService.encrypt(apiKey, userId)
     const apiSecretEnc = this.encryptionService.encrypt(apiSecret, userId)
