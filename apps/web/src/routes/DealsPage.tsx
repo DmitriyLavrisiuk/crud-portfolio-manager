@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   type ColumnDef,
@@ -28,6 +28,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { type Deal, type DealStatus } from '@/types/deals'
+import CreateDealDialog from '@/components/deals/CreateDealDialog'
+import EditDealDialog from '@/components/deals/EditDealDialog'
+import CloseDealDialog from '@/components/deals/CloseDealDialog'
+import DeleteDealDialog from '@/components/deals/DeleteDealDialog'
 
 type FiltersState = {
   from: string
@@ -59,10 +63,34 @@ function normalizeSymbol(value: string) {
 
 export default function DealsPage() {
   const { accessToken, refresh } = useAuth()
+  const [notice, setNotice] = useState<string | null>(null)
+  const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [draftFilters, setDraftFilters] =
     useState<FiltersState>(getDefaultFilters())
   const [appliedFilters, setAppliedFilters] =
     useState<FiltersState>(getDefaultFilters())
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editing, setEditing] = useState<Deal | null>(null)
+  const [closing, setClosing] = useState<Deal | null>(null)
+  const [deleting, setDeleting] = useState<Deal | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimeoutRef.current) {
+        clearTimeout(noticeTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const showNotice = useCallback((message: string) => {
+    setNotice(message)
+    if (noticeTimeoutRef.current) {
+      clearTimeout(noticeTimeoutRef.current)
+    }
+    noticeTimeoutRef.current = setTimeout(() => {
+      setNotice(null)
+    }, 3000)
+  }, [])
 
   const queryFilters = useMemo(() => {
     const symbol = normalizeSymbol(appliedFilters.symbol)
@@ -85,6 +113,18 @@ export default function DealsPage() {
   })
 
   const data = useMemo(() => dealsQuery.data?.items ?? [], [dealsQuery.data])
+
+  const handleEdit = useCallback((deal: Deal) => {
+    setEditing(deal)
+  }, [])
+
+  const handleClose = useCallback((deal: Deal) => {
+    setClosing(deal)
+  }, [])
+
+  const handleDelete = useCallback((deal: Deal) => {
+    setDeleting(deal)
+  }, [])
 
   const columns = useMemo<ColumnDef<Deal>[]>(
     () => [
@@ -126,8 +166,35 @@ export default function DealsPage() {
         header: 'PnL',
         cell: ({ row }) => row.original.realizedPnl ?? '-',
       },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => handleEdit(row.original)}
+            >
+              Edit
+            </Button>
+            {row.original.status === 'OPEN' && (
+              <Button size="sm" onClick={() => handleClose(row.original)}>
+                Close
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => handleDelete(row.original)}
+            >
+              Delete
+            </Button>
+          </div>
+        ),
+      },
     ],
-    [],
+    [handleEdit, handleClose, handleDelete],
   )
 
   const table = useReactTable({
@@ -217,9 +284,15 @@ export default function DealsPage() {
               <Button variant="outline" onClick={handleReset}>
                 Reset
               </Button>
+              <Button onClick={() => setCreateOpen(true)}>Create deal</Button>
             </div>
           </div>
 
+          {notice && (
+            <p className="text-sm text-emerald-600" role="status">
+              {notice}
+            </p>
+          )}
           {dealsQuery.isLoading && (
             <p className="text-sm text-muted-foreground">Loading deals...</p>
           )}
@@ -275,6 +348,29 @@ export default function DealsPage() {
           )}
         </CardContent>
       </Card>
+      <CreateDealDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSuccess={showNotice}
+      />
+      <EditDealDialog
+        deal={editing}
+        open={Boolean(editing)}
+        onOpenChange={(open) => (!open ? setEditing(null) : null)}
+        onSuccess={showNotice}
+      />
+      <CloseDealDialog
+        deal={closing}
+        open={Boolean(closing)}
+        onOpenChange={(open) => (!open ? setClosing(null) : null)}
+        onSuccess={showNotice}
+      />
+      <DeleteDealDialog
+        deal={deleting}
+        open={Boolean(deleting)}
+        onOpenChange={(open) => (!open ? setDeleting(null) : null)}
+        onSuccess={showNotice}
+      />
     </section>
   )
 }
