@@ -1,7 +1,9 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
+import ProtectedRoute from './auth/ProtectedRoute'
 import DashboardPage from './routes/DashboardPage'
 import LoginPage from './routes/LoginPage'
+import RegisterPage from './routes/RegisterPage'
 import SettingsPage from './routes/SettingsPage'
 
 function Layout() {
@@ -15,6 +17,9 @@ function Layout() {
           <NavLink to="/login" className={linkClass}>
             Login
           </NavLink>
+          <NavLink to="/register" className={linkClass}>
+            Register
+          </NavLink>
           <NavLink to="/dashboard" className={linkClass}>
             Dashboard
           </NavLink>
@@ -27,8 +32,23 @@ function Layout() {
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </main>
     </div>

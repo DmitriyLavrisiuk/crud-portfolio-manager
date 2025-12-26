@@ -10,9 +10,13 @@ module.exports = {
       plugins: ["react", "react-hooks", "react-refresh"],
       extends: [
         "plugin:react/recommended",
-        "plugin:react-hooks/recommended",
-        "plugin:react-refresh/recommended"
+        "plugin:react-hooks/recommended"
       ],
+      rules: {
+        "react-refresh/only-export-components": "off",
+        "react/react-in-jsx-scope": "off",
+        "react/jsx-uses-react": "off"
+      },
       settings: {
         react: {
           version: "detect"
