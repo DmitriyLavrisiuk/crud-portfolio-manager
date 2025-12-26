@@ -1,12 +1,15 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import ProtectedRoute from './auth/ProtectedRoute'
+import { useAuth } from './auth/AuthProvider'
+import AdminUsersPage from './routes/AdminUsersPage'
 import DashboardPage from './routes/DashboardPage'
 import LoginPage from './routes/LoginPage'
 import RegisterPage from './routes/RegisterPage'
 import SettingsPage from './routes/SettingsPage'
 
 function Layout() {
+  const { user } = useAuth()
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `text-sm font-medium ${isActive ? 'text-primary' : 'text-muted-foreground'}`
 
@@ -26,6 +29,11 @@ function Layout() {
           <NavLink to="/settings" className={linkClass}>
             Settings
           </NavLink>
+          {user?.role === 'admin' && (
+            <NavLink to="/admin/users" className={linkClass}>
+              Users
+            </NavLink>
+          )}
         </nav>
       </header>
       <main className="mx-auto w-full max-w-4xl px-6 py-8">
@@ -46,6 +54,14 @@ function Layout() {
             element={
               <ProtectedRoute>
                 <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute>
+                <AdminUsersPage />
               </ProtectedRoute>
             }
           />

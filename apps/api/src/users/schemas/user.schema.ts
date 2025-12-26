@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
 import { type HydratedDocument } from 'mongoose'
 
 export type UserDocument = HydratedDocument<User>
+export type UserRole = 'user' | 'admin'
 
 @Schema({ timestamps: true })
 export class User {
@@ -12,7 +13,7 @@ export class User {
   passwordHash!: string
 
   @Prop({ default: 'user' })
-  role!: 'user' | 'admin'
+  role!: UserRole
 
   createdAt?: Date
   updatedAt?: Date

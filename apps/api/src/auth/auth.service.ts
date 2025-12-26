@@ -38,7 +38,13 @@ export class AuthService {
     const passwordHash = await argon2.hash(password, {
       type: argon2.argon2id,
     })
-    const user = await this.usersService.createUser({ email, passwordHash })
+    const existingUsers = await this.usersService.countUsers()
+    const role = existingUsers === 0 ? 'admin' : 'user'
+    const user = await this.usersService.createUser({
+      email,
+      passwordHash,
+      role,
+    })
     const tokens = await this.issueTokens(user)
     await this.storeRefreshToken(
       user._id,
