@@ -182,6 +182,10 @@ export default function SpotPage() {
   const queryClient = useQueryClient()
   const [orderError, setOrderError] = useState<string | null>(null)
   const [openOrdersError, setOpenOrdersError] = useState<string | null>(null)
+  const [openOrdersSymbolInput, setOpenOrdersSymbolInput] = useState('BTCUSDT')
+  const [openOrdersSymbolQuery, setOpenOrdersSymbolQuery] = useState<
+    string | null
+  >(null)
   const [cancelTarget, setCancelTarget] = useState<BinanceSpotOrder | null>(
     null,
   )
@@ -202,10 +206,6 @@ export default function SpotPage() {
   const orderSide = useWatch({ control: orderForm.control, name: 'side' })
   const marketBuyMode =
     useWatch({ control: orderForm.control, name: 'marketBuyMode' }) ?? 'QUOTE'
-  const symbolValue = useWatch({ control: orderForm.control, name: 'symbol' })
-  const normalizedSymbol = String(symbolValue ?? '')
-    .trim()
-    .toUpperCase()
   const symbolField = orderForm.register('symbol', {
     setValueAs: (value) =>
       String(value ?? '')
@@ -214,13 +214,17 @@ export default function SpotPage() {
   })
 
   const openOrdersQuery = useQuery({
-    queryKey: ['spotOpenOrders', normalizedSymbol],
-    queryFn: () =>
-      getSpotOpenOrders(normalizedSymbol, {
+    queryKey: ['spotOpenOrders', openOrdersSymbolQuery],
+    queryFn: () => {
+      if (!openOrdersSymbolQuery) {
+        return Promise.resolve([])
+      }
+      return getSpotOpenOrders(openOrdersSymbolQuery, {
         accessToken,
         onUnauthorized: refresh,
-      }),
-    enabled: false,
+      })
+    },
+    enabled: Boolean(openOrdersSymbolQuery),
   })
 
   const placeOrderMutation = useMutation({
@@ -249,9 +253,7 @@ export default function SpotPage() {
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['spotAccount'] })
-      queryClient.invalidateQueries({
-        queryKey: ['spotOpenOrders', normalizedSymbol],
-      })
+      queryClient.invalidateQueries({ queryKey: ['spotOpenOrders'] })
       setOrderError(null)
     },
     onError: (error) => {
@@ -264,14 +266,15 @@ export default function SpotPage() {
   const cancelMutation = useMutation({
     mutationFn: (order: BinanceSpotOrder) =>
       cancelSpotOrder(
-        { symbol: normalizedSymbol, orderId: order.orderId },
+        {
+          symbol: openOrdersSymbolQuery ?? order.symbol,
+          orderId: order.orderId,
+        },
         { accessToken, onUnauthorized: refresh },
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['spotAccount'] })
-      queryClient.invalidateQueries({
-        queryKey: ['spotOpenOrders', normalizedSymbol],
-      })
+      queryClient.invalidateQueries({ queryKey: ['spotOpenOrders'] })
       setCancelTarget(null)
       setOpenOrdersError(null)
     },
@@ -424,32 +427,45 @@ export default function SpotPage() {
               <div className="space-y-3 md:col-span-2">
                 <div className="flex flex-wrap items-center gap-4">
                   <Label>Market buy mode</Label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      value="QUOTE"
-                      {...orderForm.register('marketBuyMode')}
-                      checked={marketBuyMode === 'QUOTE'}
-                      onChange={() => {
-                        orderForm.setValue('marketBuyMode', 'QUOTE')
-                        orderForm.setValue('quantity', '')
-                      }}
-                    />
-                    Spend (quote)
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      value="BASE"
-                      {...orderForm.register('marketBuyMode')}
-                      checked={marketBuyMode === 'BASE'}
-                      onChange={() => {
-                        orderForm.setValue('marketBuyMode', 'BASE')
-                        orderForm.setValue('quoteOrderQty', '')
-                      }}
-                    />
-                    Buy amount (base)
-                  </label>
+                  {(() => {
+                    const field = orderForm.register('marketBuyMode')
+                    return (
+                      <>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="radio"
+                            value="QUOTE"
+                            name={field.name}
+                            ref={field.ref}
+                            checked={marketBuyMode === 'QUOTE'}
+                            onChange={(event) => {
+                              field.onChange(event)
+                              orderForm.setValue('quantity', '', {
+                                shouldValidate: false,
+                              })
+                            }}
+                          />
+                          Spend (quote)
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="radio"
+                            value="BASE"
+                            name={field.name}
+                            ref={field.ref}
+                            checked={marketBuyMode === 'BASE'}
+                            onChange={(event) => {
+                              field.onChange(event)
+                              orderForm.setValue('quoteOrderQty', '', {
+                                shouldValidate: false,
+                              })
+                            }}
+                          />
+                          Buy amount (base)
+                        </label>
+                      </>
+                    )
+                  })()}
                 </div>
 
                 {marketBuyMode === 'QUOTE' ? (
@@ -546,12 +562,17 @@ export default function SpotPage() {
             <Button
               variant="outline"
               onClick={() => {
-                if (!normalizedSymbol) {
+                const nextSymbol = openOrdersSymbolInput.trim().toUpperCase()
+                if (!nextSymbol) {
                   setOpenOrdersError('Symbol is required.')
                   return
                 }
                 setOpenOrdersError(null)
-                openOrdersQuery.refetch()
+                setOpenOrdersSymbolQuery(nextSymbol)
+                orderForm.setValue('symbol', nextSymbol, {
+                  shouldValidate: false,
+                  shouldDirty: true,
+                })
               }}
               disabled={openOrdersQuery.isFetching}
             >
@@ -562,17 +583,8 @@ export default function SpotPage() {
             <Label htmlFor="spot-orders-symbol">Symbol</Label>
             <Input
               id="spot-orders-symbol"
-              value={normalizedSymbol}
-              onChange={(event) => {
-                orderForm.setValue(
-                  'symbol',
-                  event.target.value.toUpperCase().trim(),
-                  {
-                    shouldValidate: false,
-                    shouldDirty: true,
-                  },
-                )
-              }}
+              value={openOrdersSymbolInput}
+              onChange={(event) => setOpenOrdersSymbolInput(event.target.value)}
             />
           </div>
         </CardHeader>
