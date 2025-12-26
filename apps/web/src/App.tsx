@@ -4,6 +4,7 @@ import ProtectedRoute from './auth/ProtectedRoute'
 import { useAuth } from './auth/AuthProvider'
 import AdminUsersPage from './routes/AdminUsersPage'
 import DashboardPage from './routes/DashboardPage'
+import DealsPage from './routes/DealsPage'
 import LoginPage from './routes/LoginPage'
 import RegisterPage from './routes/RegisterPage'
 import SettingsPage from './routes/SettingsPage'
@@ -33,6 +34,9 @@ function Layout() {
           </NavLink>
           <NavLink to="/transactions" className={linkClass}>
             Transactions
+          </NavLink>
+          <NavLink to="/deals" className={linkClass}>
+            Deals
           </NavLink>
           <NavLink to="/spot" className={linkClass}>
             Spot
@@ -70,6 +74,14 @@ function Layout() {
             element={
               <ProtectedRoute>
                 <TransactionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/deals"
+            element={
+              <ProtectedRoute>
+                <DealsPage />
               </ProtectedRoute>
             }
           />

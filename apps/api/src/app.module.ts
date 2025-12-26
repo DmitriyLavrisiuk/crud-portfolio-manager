@@ -6,6 +6,7 @@ import { MongooseModule } from '@nestjs/mongoose'
 import { AppController } from './app.controller'
 import { AuthModule } from './auth/auth.module'
 import { BinanceModule } from './binance/binance.module'
+import { DealsModule } from './deals/deals.module'
 import { RefreshTokensModule } from './refresh-tokens/refresh-tokens.module'
 import { TransactionsModule } from './transactions/transactions.module'
 import { UsersModule } from './users/users.module'
@@ -30,6 +31,7 @@ import { UsersModule } from './users/users.module'
     RefreshTokensModule,
     AuthModule,
     TransactionsModule,
+    DealsModule,
     BinanceModule,
   ],
   controllers: [AppController],
