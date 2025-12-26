@@ -1,4 +1,11 @@
-import { memo, useCallback, useMemo, useState, type ChangeEvent } from 'react'
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -547,7 +554,7 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
   const [openOrdersError, setOpenOrdersError] = useState<string | null>(null)
-  const [openOrdersSymbolInput, setOpenOrdersSymbolInput] = useState('BTCUSDT')
+  const openOrdersSymbolRef = useRef<HTMLInputElement>(null)
   const [openOrdersSymbolQuery, setOpenOrdersSymbolQuery] = useState<
     string | null
   >(null)
@@ -581,7 +588,7 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
     mutationFn: (order: BinanceSpotOrder) =>
       cancelSpotOrder(
         {
-          symbol: openOrdersSymbolQuery ?? order.symbol,
+          symbol: order.symbol ?? openOrdersSymbolQuery ?? '',
           orderId: order.orderId,
         },
         { accessToken, onUnauthorized: refresh },
@@ -717,21 +724,20 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
   })
 
   const handleLoad = useCallback(() => {
-    const nextSymbol = openOrdersSymbolInput.trim().toUpperCase()
+    const nextSymbol = (openOrdersSymbolRef.current?.value ?? '')
+      .trim()
+      .toUpperCase()
     if (!nextSymbol) {
       setOpenOrdersError('Symbol is required.')
       return
     }
     setOpenOrdersError(null)
+    if (nextSymbol === openOrdersSymbolQuery) {
+      openOrdersQuery.refetch()
+      return
+    }
     setOpenOrdersSymbolQuery(nextSymbol)
-  }, [openOrdersSymbolInput])
-
-  const handleSymbolChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      setOpenOrdersSymbolInput(event.target.value)
-    },
-    [],
-  )
+  }, [openOrdersQuery, openOrdersSymbolQuery])
 
   const handleEditPriceChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -771,8 +777,8 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
           <Label htmlFor="spot-orders-symbol">Symbol</Label>
           <Input
             id="spot-orders-symbol"
-            value={openOrdersSymbolInput}
-            onChange={handleSymbolChange}
+            defaultValue="BTCUSDT"
+            ref={openOrdersSymbolRef}
           />
         </div>
       </CardHeader>
@@ -940,7 +946,7 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
 
 const RecentTradesCard = memo(function RecentTradesCard() {
   const { accessToken, refresh } = useAuth()
-  const [tradesSymbolInput, setTradesSymbolInput] = useState('BTCUSDT')
+  const tradesSymbolRef = useRef<HTMLInputElement>(null)
   const [tradesSymbolQuery, setTradesSymbolQuery] = useState<string | null>(
     null,
   )
@@ -991,19 +997,18 @@ const RecentTradesCard = memo(function RecentTradesCard() {
   })
 
   const handleLoad = useCallback(() => {
-    const nextSymbol = tradesSymbolInput.trim().toUpperCase()
+    const nextSymbol = (tradesSymbolRef.current?.value ?? '')
+      .trim()
+      .toUpperCase()
     if (!nextSymbol) {
       return
     }
+    if (nextSymbol === tradesSymbolQuery) {
+      tradesQuery.refetch()
+      return
+    }
     setTradesSymbolQuery(nextSymbol)
-  }, [tradesSymbolInput])
-
-  const handleSymbolChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      setTradesSymbolInput(event.target.value)
-    },
-    [],
-  )
+  }, [tradesQuery, tradesSymbolQuery])
 
   return (
     <Card>
@@ -1022,8 +1027,8 @@ const RecentTradesCard = memo(function RecentTradesCard() {
           <Label htmlFor="spot-trades-symbol">Symbol</Label>
           <Input
             id="spot-trades-symbol"
-            value={tradesSymbolInput}
-            onChange={handleSymbolChange}
+            defaultValue="BTCUSDT"
+            ref={tradesSymbolRef}
           />
         </div>
       </CardHeader>
