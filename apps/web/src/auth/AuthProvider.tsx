@@ -4,7 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState
+  useState,
 } from 'react'
 
 import { apiFetch } from '@/lib/api'
@@ -40,13 +40,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include'
-      })
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/auth/refresh`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        },
+      )
+      if (response.status === 401) {
+        setUser(null)
+        setAccessToken(null)
+        return null
+      }
       if (!response.ok) {
         setUser(null)
         setAccessToken(null)
+        if (response.status >= 500) {
+          console.error('Auth refresh failed with a server error.')
+        }
         return null
       }
       const data = (await response.json()) as AuthResponse
@@ -56,6 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setUser(null)
       setAccessToken(null)
+      console.error('Auth refresh failed due to a network error.')
       return null
     }
   }, [])
@@ -81,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const data = await apiFetch<AuthResponse>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password }),
     })
     setUser(data.user)
     setAccessToken(data.accessToken)
@@ -90,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (email: string, password: string) => {
     const data = await apiFetch<AuthResponse>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password }),
     })
     setUser(data.user)
     setAccessToken(data.accessToken)
@@ -100,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await apiFetch<{ ok: true }>('/auth/logout', {
       method: 'POST',
       accessToken,
-      onUnauthorized: refresh
+      onUnauthorized: refresh,
     })
     setUser(null)
     setAccessToken(null)
@@ -115,9 +127,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
-      refresh
+      refresh,
     }),
-    [user, accessToken, isInitializing, login, register, logout, refresh]
+    [user, accessToken, isInitializing, login, register, logout, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
