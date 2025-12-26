@@ -75,13 +75,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isActive = true
     const bootstrap = async () => {
-      const token = await refresh()
-      if (isActive) {
-        if (!token) {
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/auth/session`,
+          {
+            method: 'GET',
+            credentials: 'include',
+          },
+        )
+        if (!response.ok) {
+          if (isActive) {
+            setUser(null)
+            setAccessToken(null)
+            setIsInitializing(false)
+          }
+          return
+        }
+        const data = (await response.json()) as { authenticated: boolean }
+        if (!data.authenticated) {
+          if (isActive) {
+            setUser(null)
+            setAccessToken(null)
+            setIsInitializing(false)
+          }
+          return
+        }
+
+        const token = await refresh()
+        if (isActive) {
+          if (!token) {
+            setUser(null)
+            setAccessToken(null)
+          }
+          setIsInitializing(false)
+        }
+      } catch {
+        if (isActive) {
           setUser(null)
           setAccessToken(null)
+          setIsInitializing(false)
         }
-        setIsInitializing(false)
       }
     }
     bootstrap()

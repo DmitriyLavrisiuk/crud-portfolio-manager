@@ -31,17 +31,26 @@ export class AuthService {
     private usersService: UsersService,
     private refreshTokensService: RefreshTokensService,
     private jwtService: JwtService,
-    private configService: ConfigService
+    private configService: ConfigService,
   ) {}
 
   async register(email: string, password: string) {
     const passwordHash = await argon2.hash(password, {
-      type: argon2.argon2id
+      type: argon2.argon2id,
     })
     const user = await this.usersService.createUser({ email, passwordHash })
     const tokens = await this.issueTokens(user)
-    await this.storeRefreshToken(user._id, tokens.refreshToken, tokens.refreshExpiresAt)
-    return { user: this.toAuthUser(user), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, refreshExpiresAt: tokens.refreshExpiresAt }
+    await this.storeRefreshToken(
+      user._id,
+      tokens.refreshToken,
+      tokens.refreshExpiresAt,
+    )
+    return {
+      user: this.toAuthUser(user),
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      refreshExpiresAt: tokens.refreshExpiresAt,
+    }
   }
 
   async login(email: string, password: string) {
@@ -56,8 +65,17 @@ export class AuthService {
     }
 
     const tokens = await this.issueTokens(user)
-    await this.storeRefreshToken(user._id, tokens.refreshToken, tokens.refreshExpiresAt)
-    return { user: this.toAuthUser(user), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, refreshExpiresAt: tokens.refreshExpiresAt }
+    await this.storeRefreshToken(
+      user._id,
+      tokens.refreshToken,
+      tokens.refreshExpiresAt,
+    )
+    return {
+      user: this.toAuthUser(user),
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      refreshExpiresAt: tokens.refreshExpiresAt,
+    }
   }
 
   async refresh(refreshToken: string) {
@@ -77,8 +95,17 @@ export class AuthService {
     }
 
     const tokens = await this.issueTokens(user)
-    await this.storeRefreshToken(user._id, tokens.refreshToken, tokens.refreshExpiresAt)
-    return { user: this.toAuthUser(user), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, refreshExpiresAt: tokens.refreshExpiresAt }
+    await this.storeRefreshToken(
+      user._id,
+      tokens.refreshToken,
+      tokens.refreshExpiresAt,
+    )
+    return {
+      user: this.toAuthUser(user),
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      refreshExpiresAt: tokens.refreshExpiresAt,
+    }
   }
 
   async logout(refreshToken: string | undefined) {
@@ -88,6 +115,30 @@ export class AuthService {
     const tokenHash = this.hashToken(refreshToken)
     await this.refreshTokensService.deleteByHash(tokenHash)
     return { ok: true }
+  }
+
+  async getSession(refreshToken: string | undefined) {
+    if (!refreshToken) {
+      return { authenticated: false }
+    }
+    try {
+      const payload = await this.verifyRefreshToken(refreshToken)
+      const tokenHash = this.hashToken(refreshToken)
+
+      const stored = await this.refreshTokensService.findByHash(tokenHash)
+      if (!stored || stored.expiresAt.getTime() < Date.now()) {
+        return { authenticated: false }
+      }
+
+      const user = await this.usersService.findById(payload.sub)
+      if (!user) {
+        return { authenticated: false }
+      }
+
+      return { authenticated: true, user: this.toAuthUser(user) }
+    } catch {
+      return { authenticated: false }
+    }
   }
 
   getRefreshCookieName() {
@@ -100,7 +151,7 @@ export class AuthService {
       httpOnly: true,
       sameSite: 'lax' as const,
       secure,
-      path: '/'
+      path: '/',
     }
   }
 
@@ -109,20 +160,20 @@ export class AuthService {
       { sub: user._id.toString(), email: user.email, role: user.role },
       {
         secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_ACCESS_TTL')
-      }
+        expiresIn: this.configService.get<string>('JWT_ACCESS_TTL'),
+      },
     )
 
     const refreshToken = await this.jwtService.signAsync(
       { sub: user._id.toString(), email: user.email },
       {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_REFRESH_TTL')
-      }
+        expiresIn: this.configService.get<string>('JWT_REFRESH_TTL'),
+      },
     )
 
     const refreshExpiresAt = this.calculateExpiresAt(
-      this.configService.get<string>('JWT_REFRESH_TTL')
+      this.configService.get<string>('JWT_REFRESH_TTL'),
     )
 
     return { accessToken, refreshToken, refreshExpiresAt }
@@ -131,13 +182,13 @@ export class AuthService {
   private async storeRefreshToken(
     userId: Types.ObjectId,
     refreshToken: string,
-    refreshExpiresAt: Date
+    refreshExpiresAt: Date,
   ) {
     const tokenHash = this.hashToken(refreshToken)
     await this.refreshTokensService.create({
       userId,
       tokenHash,
-      expiresAt: refreshExpiresAt
+      expiresAt: refreshExpiresAt,
     })
   }
 
@@ -146,8 +197,8 @@ export class AuthService {
       return await this.jwtService.verifyAsync<{ sub: string; email: string }>(
         refreshToken,
         {
-          secret: this.configService.get<string>('JWT_REFRESH_SECRET')
-        }
+          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        },
       )
     } catch {
       throw new UnauthorizedException('Invalid refresh token')
@@ -170,7 +221,7 @@ export class AuthService {
       s: 1000,
       m: 60 * 1000,
       h: 60 * 60 * 1000,
-      d: 24 * 60 * 60 * 1000
+      d: 24 * 60 * 60 * 1000,
     }
     return value * multipliers[unit]
   }
@@ -185,7 +236,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       createdAt: user.createdAt,
-      updatedAt: user.updatedAt
+      updatedAt: user.updatedAt,
     }
   }
 }

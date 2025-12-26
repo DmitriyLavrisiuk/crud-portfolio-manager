@@ -5,7 +5,7 @@ import {
   Post,
   Req,
   Res,
-  UseGuards
+  UseGuards,
 } from '@nestjs/common'
 import { Response, Request } from 'express'
 
@@ -22,7 +22,7 @@ export class AuthController {
   async register(
     @Body(new ZodValidationPipe(authCredentialsSchema))
     body: { email: string; password: string },
-    @Res({ passthrough: true }) res: Response
+    @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.register(body.email, body.password)
     this.setRefreshCookie(res, result.refreshToken, result.refreshExpiresAt)
@@ -33,15 +33,24 @@ export class AuthController {
   async login(
     @Body(new ZodValidationPipe(authCredentialsSchema))
     body: { email: string; password: string },
-    @Res({ passthrough: true }) res: Response
+    @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(body.email, body.password)
     this.setRefreshCookie(res, result.refreshToken, result.refreshExpiresAt)
     return { user: result.user, accessToken: result.accessToken }
   }
 
+  @Get('session')
+  async session(@Req() req: Request) {
+    const refreshToken = req.cookies?.[this.authService.getRefreshCookieName()]
+    return this.authService.getSession(refreshToken)
+  }
+
   @Post('refresh')
-  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const refreshToken = req.cookies?.[this.authService.getRefreshCookieName()]
     const result = await this.authService.refresh(refreshToken)
     this.setRefreshCookie(res, result.refreshToken, result.refreshExpiresAt)
@@ -54,7 +63,7 @@ export class AuthController {
     const result = await this.authService.logout(refreshToken)
     res.clearCookie(
       this.authService.getRefreshCookieName(),
-      this.authService.getRefreshCookieOptions()
+      this.authService.getRefreshCookieOptions(),
     )
     return result
   }
@@ -69,12 +78,12 @@ export class AuthController {
   private setRefreshCookie(
     res: Response,
     refreshToken: string,
-    refreshExpiresAt: Date
+    refreshExpiresAt: Date,
   ) {
     const maxAge = Math.max(refreshExpiresAt.getTime() - Date.now(), 0)
     res.cookie(this.authService.getRefreshCookieName(), refreshToken, {
       ...this.authService.getRefreshCookieOptions(),
-      maxAge
+      maxAge,
     })
   }
 }
