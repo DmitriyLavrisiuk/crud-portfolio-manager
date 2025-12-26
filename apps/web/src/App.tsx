@@ -7,6 +7,7 @@ import DashboardPage from './routes/DashboardPage'
 import LoginPage from './routes/LoginPage'
 import RegisterPage from './routes/RegisterPage'
 import SettingsPage from './routes/SettingsPage'
+import SpotPage from './routes/SpotPage'
 import TransactionsPage from './routes/TransactionsPage'
 
 function Layout() {
@@ -32,6 +33,9 @@ function Layout() {
           </NavLink>
           <NavLink to="/transactions" className={linkClass}>
             Transactions
+          </NavLink>
+          <NavLink to="/spot" className={linkClass}>
+            Spot
           </NavLink>
           {user?.role === 'admin' && (
             <NavLink to="/admin/users" className={linkClass}>
@@ -66,6 +70,14 @@ function Layout() {
             element={
               <ProtectedRoute>
                 <TransactionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/spot"
+            element={
+              <ProtectedRoute>
+                <SpotPage />
               </ProtectedRoute>
             }
           />

@@ -7,7 +7,7 @@ type ApiFetchOptions = RequestInit & {
 
 export async function apiFetch<T>(
   path: string,
-  options: ApiFetchOptions = {}
+  options: ApiFetchOptions = {},
 ): Promise<T> {
   const { accessToken, onUnauthorized, ...init } = options
   const response = await fetch(`${API_URL}${path}`, {
@@ -16,8 +16,8 @@ export async function apiFetch<T>(
     headers: {
       'Content-Type': 'application/json',
       ...(init.headers ?? {}),
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
-    }
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
   })
 
   if (response.status === 401 && onUnauthorized) {
@@ -29,8 +29,8 @@ export async function apiFetch<T>(
         headers: {
           'Content-Type': 'application/json',
           ...(init.headers ?? {}),
-          Authorization: `Bearer ${newAccessToken}`
-        }
+          Authorization: `Bearer ${newAccessToken}`,
+        },
       })
       return await parseJson<T>(retry)
     }
@@ -40,18 +40,22 @@ export async function apiFetch<T>(
 }
 
 async function parseJson<T>(response: Response): Promise<T> {
+  const data = await safeJson(response)
   if (!response.ok) {
-    const message = await safeErrorMessage(response)
-    throw new Error(message)
+    const message = data?.message ?? `Request failed (${response.status})`
+    const error = new Error(message) as Error & { data?: unknown }
+    if (data) {
+      error.data = data
+    }
+    throw error
   }
-  return (await response.json()) as T
+  return data as T
 }
 
-async function safeErrorMessage(response: Response) {
+async function safeJson(response: Response) {
   try {
-    const data = await response.json()
-    return data?.message ?? `Request failed (${response.status})`
+    return await response.json()
   } catch {
-    return `Request failed (${response.status})`
+    return null
   }
 }
