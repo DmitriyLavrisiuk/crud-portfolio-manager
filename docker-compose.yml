@@ -1,0 +1,16 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: crud-portfolio-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: u918Fgdhxji1phudgLKAD8y19uhipjih9f28
+      MONGO_INITDB_DATABASE: crud_portfolio_manager
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  mongo_data:
