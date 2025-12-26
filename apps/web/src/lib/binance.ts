@@ -35,6 +35,19 @@ export type BinanceSpotOrder = {
   timeInForce?: string
 }
 
+export type BinanceSpotTrade = {
+  id: number
+  orderId: number
+  price: string
+  qty: string
+  quoteQty: string
+  commission: string
+  commissionAsset: string
+  time: number
+  isBuyer: boolean
+  isMaker: boolean
+}
+
 type AuthOptions = {
   accessToken: string | null
   onUnauthorized: () => Promise<string | null>
@@ -135,6 +148,28 @@ export async function cancelSpotOrder(
   })
 }
 
+export async function cancelReplaceSpotOrder(
+  payload: {
+    symbol: string
+    cancelOrderId?: number | string
+    cancelOrigClientOrderId?: string
+    cancelReplaceMode?: 'STOP_ON_FAILURE'
+    side: 'BUY' | 'SELL'
+    type: 'LIMIT'
+    timeInForce?: 'GTC'
+    quantity: string
+    price: string
+  },
+  auth: AuthOptions,
+) {
+  return apiFetch('/binance/spot/order/cancel-replace', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
 export async function querySpotOrder(
   payload: {
     symbol: string
@@ -156,6 +191,36 @@ export async function querySpotOrder(
 
   return apiFetch<BinanceSpotOrder>(
     `/binance/spot/order?${params.toString()}`,
+    {
+      method: 'GET',
+      accessToken: auth.accessToken,
+      onUnauthorized: auth.onUnauthorized,
+    },
+  )
+}
+
+export async function getSpotMyTrades(
+  payload: {
+    symbol: string
+    startTime?: number
+    endTime?: number
+    fromId?: number
+    limit?: number
+  },
+  auth: AuthOptions,
+) {
+  const params = new URLSearchParams(
+    Object.entries(payload).reduce<Record<string, string>>(
+      (acc, [key, value]) => {
+        if (value === undefined) return acc
+        acc[key] = String(value)
+        return acc
+      },
+      {},
+    ),
+  )
+  return apiFetch<BinanceSpotTrade[]>(
+    `/binance/spot/my-trades?${params.toString()}`,
     {
       method: 'GET',
       accessToken: auth.accessToken,

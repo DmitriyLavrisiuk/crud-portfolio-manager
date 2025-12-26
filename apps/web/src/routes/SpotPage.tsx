@@ -41,11 +41,21 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  cancelReplaceSpotOrder,
   cancelSpotOrder,
   getSpotAccount,
+  getSpotMyTrades,
   getSpotOpenOrders,
   placeSpotOrder,
   type BinanceSpotOrder,
+  type BinanceSpotTrade,
 } from '@/lib/binance'
 
 const emptyToUndefined = (value: unknown) => {
@@ -293,6 +303,7 @@ const PlaceOrderCard = memo(function PlaceOrderCard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['spotAccount'] })
       queryClient.invalidateQueries({ queryKey: ['spotOpenOrders'] })
+      queryClient.invalidateQueries({ queryKey: ['spotMyTrades'] })
       setOrderError(null)
       orderForm.clearErrors()
     },
@@ -543,6 +554,14 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
   const [cancelTarget, setCancelTarget] = useState<BinanceSpotOrder | null>(
     null,
   )
+  const [editTarget, setEditTarget] = useState<BinanceSpotOrder | null>(null)
+  const [editPrice, setEditPrice] = useState('')
+  const [editQuantity, setEditQuantity] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editFieldErrors, setEditFieldErrors] = useState<{
+    price?: string
+    quantity?: string
+  }>({})
 
   const openOrdersQuery = useQuery({
     queryKey: ['spotOpenOrders', openOrdersSymbolQuery],
@@ -580,6 +599,72 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
     },
   })
 
+  const editMutation = useMutation({
+    mutationFn: (order: BinanceSpotOrder) =>
+      cancelReplaceSpotOrder(
+        {
+          symbol: openOrdersSymbolQuery ?? order.symbol,
+          cancelOrderId: order.orderId,
+          cancelReplaceMode: 'STOP_ON_FAILURE',
+          side: order.side,
+          type: 'LIMIT',
+          timeInForce: 'GTC',
+          quantity: editQuantity.trim(),
+          price: editPrice.trim(),
+        },
+        { accessToken, onUnauthorized: refresh },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['spotAccount'] })
+      queryClient.invalidateQueries({ queryKey: ['spotOpenOrders'] })
+      queryClient.invalidateQueries({ queryKey: ['spotMyTrades'] })
+      setEditTarget(null)
+      setEditError(null)
+      setEditFieldErrors({})
+    },
+    onError: (error) => {
+      const apiError = error as ApiErrorWithData
+      if (apiError.data?.code === 'BINANCE_FILTER_FAILURE') {
+        const { filter, symbol, details } = apiError.data
+        if (filter === 'NOTIONAL') {
+          const minNotional = details?.minNotional ?? '—'
+          const notional = details?.notional ?? '—'
+          const quoteAsset = details?.quoteAsset ?? ''
+          const message = `Минимальная сумма сделки для ${symbol}: ${minNotional} ${quoteAsset}. У тебя: ${notional}.`
+          setEditError(message)
+          setEditFieldErrors({ price: message })
+          return
+        }
+        if (filter === 'LOT_SIZE') {
+          setEditError(apiError.data.message)
+          setEditFieldErrors({ quantity: apiError.data.message })
+          return
+        }
+        if (filter === 'PRICE_FILTER') {
+          setEditError(apiError.data.message)
+          setEditFieldErrors({ price: apiError.data.message })
+          return
+        }
+      }
+
+      setEditError(
+        error instanceof Error ? error.message : 'Failed to edit order.',
+      )
+    },
+  })
+
+  const handleCancelOpen = useCallback((order: BinanceSpotOrder) => {
+    setCancelTarget(order)
+  }, [])
+
+  const handleEditOpen = useCallback((order: BinanceSpotOrder) => {
+    setEditTarget(order)
+    setEditPrice(order.price)
+    setEditQuantity(order.origQty)
+    setEditError(null)
+    setEditFieldErrors({})
+  }, [])
+
   const columns = useMemo<ColumnDef<BinanceSpotOrder>[]>(
     () => [
       { accessorKey: 'orderId', header: 'Order ID' },
@@ -593,18 +678,36 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
       {
         id: 'actions',
         header: 'Actions',
-        cell: ({ row }) => (
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setCancelTarget(row.original)}
-          >
-            Cancel
-          </Button>
-        ),
+        cell: ({ row }) => {
+          const order = row.original
+          const canEdit =
+            order.type === 'LIMIT' &&
+            (order.status === 'NEW' || order.status === 'PARTIALLY_FILLED')
+
+          return (
+            <div className="flex flex-wrap gap-2">
+              {canEdit ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleEditOpen(order)}
+                >
+                  Edit
+                </Button>
+              ) : null}
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleCancelOpen(order)}
+              >
+                Cancel
+              </Button>
+            </div>
+          )
+        },
       },
     ],
-    [],
+    [handleCancelOpen, handleEditOpen],
   )
 
   const table = useReactTable({
@@ -629,6 +732,27 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
     },
     [],
   )
+
+  const handleEditPriceChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setEditPrice(event.target.value)
+    },
+    [],
+  )
+
+  const handleEditQuantityChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setEditQuantity(event.target.value)
+    },
+    [],
+  )
+
+  const handleEditSubmit = useCallback(() => {
+    if (!editTarget) return
+    setEditError(null)
+    setEditFieldErrors({})
+    editMutation.mutate(editTarget)
+  }, [editMutation, editTarget])
 
   return (
     <Card>
@@ -749,6 +873,219 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={Boolean(editTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditTarget(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit limit order</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="edit-price">Price</Label>
+              <Input
+                id="edit-price"
+                value={editPrice}
+                onChange={handleEditPriceChange}
+              />
+              {editFieldErrors.price ? (
+                <p className="text-xs text-destructive">
+                  {editFieldErrors.price}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-quantity">Quantity</Label>
+              <Input
+                id="edit-quantity"
+                value={editQuantity}
+                onChange={handleEditQuantityChange}
+              />
+              {editFieldErrors.quantity ? (
+                <p className="text-xs text-destructive">
+                  {editFieldErrors.quantity}
+                </p>
+              ) : null}
+            </div>
+            {editError ? (
+              <p className="text-sm text-destructive">{editError}</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditTarget(null)}
+              disabled={editMutation.isPending}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={handleEditSubmit}
+              disabled={editMutation.isPending}
+            >
+              {editMutation.isPending ? 'Saving...' : 'Save changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+})
+
+const RecentTradesCard = memo(function RecentTradesCard() {
+  const { accessToken, refresh } = useAuth()
+  const [tradesSymbolInput, setTradesSymbolInput] = useState('BTCUSDT')
+  const [tradesSymbolQuery, setTradesSymbolQuery] = useState<string | null>(
+    null,
+  )
+
+  const tradesQuery = useQuery({
+    queryKey: ['spotMyTrades', tradesSymbolQuery],
+    queryFn: () => {
+      if (!tradesSymbolQuery) {
+        return Promise.resolve([])
+      }
+      return getSpotMyTrades(
+        { symbol: tradesSymbolQuery, limit: 100 },
+        { accessToken, onUnauthorized: refresh },
+      )
+    },
+    enabled: Boolean(tradesSymbolQuery),
+  })
+
+  const columns = useMemo<ColumnDef<BinanceSpotTrade>[]>(
+    () => [
+      {
+        accessorKey: 'time',
+        header: 'Time',
+        cell: ({ row }) => new Date(row.original.time).toLocaleString(),
+      },
+      {
+        id: 'side',
+        header: 'Side',
+        cell: ({ row }) => (row.original.isBuyer ? 'BUY' : 'SELL'),
+      },
+      { accessorKey: 'price', header: 'Price' },
+      { accessorKey: 'qty', header: 'Qty' },
+      { accessorKey: 'quoteQty', header: 'Quote Qty' },
+      {
+        id: 'commission',
+        header: 'Commission',
+        cell: ({ row }) =>
+          `${row.original.commission} ${row.original.commissionAsset}`,
+      },
+    ],
+    [],
+  )
+
+  const table = useReactTable({
+    data: tradesQuery.data ?? [],
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  })
+
+  const handleLoad = useCallback(() => {
+    const nextSymbol = tradesSymbolInput.trim().toUpperCase()
+    if (!nextSymbol) {
+      return
+    }
+    setTradesSymbolQuery(nextSymbol)
+  }, [tradesSymbolInput])
+
+  const handleSymbolChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setTradesSymbolInput(event.target.value)
+    },
+    [],
+  )
+
+  return (
+    <Card>
+      <CardHeader className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <CardTitle>Recent trades</CardTitle>
+          <Button
+            variant="outline"
+            onClick={handleLoad}
+            disabled={tradesQuery.isFetching}
+          >
+            Load
+          </Button>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="spot-trades-symbol">Symbol</Label>
+          <Input
+            id="spot-trades-symbol"
+            value={tradesSymbolInput}
+            onChange={handleSymbolChange}
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {tradesQuery.isFetching ? (
+          <p className="text-sm text-muted-foreground">Loading trades...</p>
+        ) : tradesQuery.data && tradesQuery.data.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No trades found.</p>
+        ) : (
+          <div className="rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                {table.getHeaderGroups().map((group) => (
+                  <TableRow key={group.id}>
+                    {group.headers.map((header) => (
+                      <TableHead key={header.id}>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows.length ? (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow key={row.id}>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={table.getAllColumns().length}
+                      className="text-center text-sm text-muted-foreground"
+                    >
+                      Load trades to see results.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {tradesQuery.error instanceof Error ? (
+          <p className="text-sm text-destructive">
+            {tradesQuery.error.message}
+          </p>
+        ) : null}
+      </CardContent>
     </Card>
   )
 })
@@ -765,6 +1102,7 @@ export default function SpotPage() {
 
       <AccountCard />
       <PlaceOrderCard />
+      <RecentTradesCard />
       <OpenOrdersCard />
     </section>
   )

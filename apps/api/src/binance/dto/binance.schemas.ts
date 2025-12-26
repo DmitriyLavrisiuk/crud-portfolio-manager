@@ -46,6 +46,38 @@ export const binanceSpotQueryOrderSchema = z
 
 export const binanceSpotCancelOrderSchema = binanceSpotQueryOrderSchema
 
+export const binanceSpotCancelReplaceSchema = z
+  .object({
+    symbol: symbolSchema,
+    cancelOrderId: orderIdSchema.optional(),
+    cancelOrigClientOrderId: z.string().trim().optional(),
+    cancelReplaceMode: z.literal('STOP_ON_FAILURE').optional(),
+    side: z.enum(['BUY', 'SELL']),
+    type: z.literal('LIMIT'),
+    quantity: decimalStringSchema,
+    price: decimalStringSchema,
+    timeInForce: z.literal('GTC').optional(),
+  })
+  .superRefine((values, ctx) => {
+    const hasOrderId = Boolean(values.cancelOrderId)
+    const hasOrigClientOrderId = Boolean(values.cancelOrigClientOrderId)
+    if (hasOrderId === hasOrigClientOrderId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide cancelOrderId or cancelOrigClientOrderId',
+        path: ['cancelOrderId'],
+      })
+    }
+  })
+
+export const binanceSpotMyTradesSchema = z.object({
+  symbol: symbolSchema,
+  limit: z.coerce.number().int().min(1).max(1000).optional(),
+  fromId: z.coerce.number().int().nonnegative().optional(),
+  startTime: z.coerce.number().int().nonnegative().optional(),
+  endTime: z.coerce.number().int().nonnegative().optional(),
+})
+
 export const binanceSpotPlaceOrderSchema = z
   .object({
     symbol: symbolSchema,
@@ -145,6 +177,10 @@ export type BinanceSpotQueryOrderQuery = z.infer<
 export type BinanceSpotCancelOrderDto = z.infer<
   typeof binanceSpotCancelOrderSchema
 >
+export type BinanceSpotCancelReplaceDto = z.infer<
+  typeof binanceSpotCancelReplaceSchema
+>
 export type BinanceSpotPlaceOrderDto = z.infer<
   typeof binanceSpotPlaceOrderSchema
 >
+export type BinanceSpotMyTradesQuery = z.infer<typeof binanceSpotMyTradesSchema>

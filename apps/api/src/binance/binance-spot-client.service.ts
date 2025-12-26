@@ -13,7 +13,7 @@ type BinanceErrorPayload = {
   msg?: string
 }
 
-type SignedRequestParams = Record<string, string | number | undefined>
+type SignedRequestParams = Record<string, string | number | boolean | undefined>
 
 type ExchangeInfoFilter = {
   filterType: string
@@ -29,6 +29,7 @@ type ExchangeInfoFilter = {
 type ExchangeInfoSnapshot = {
   baseAsset: string
   quoteAsset: string
+  cancelReplaceAllowed: boolean
   filters: {
     lotSize?: ExchangeInfoFilter
     priceFilter?: ExchangeInfoFilter
@@ -128,6 +129,7 @@ export class BinanceSpotClientService {
         baseAsset?: string
         quoteAsset?: string
         filters?: ExchangeInfoFilter[]
+        cancelReplaceAllowed?: boolean
       }>
     }
     const info = data.symbols?.[0]
@@ -139,6 +141,7 @@ export class BinanceSpotClientService {
     const snapshot: ExchangeInfoSnapshot = {
       baseAsset: info.baseAsset,
       quoteAsset: info.quoteAsset,
+      cancelReplaceAllowed: Boolean(info.cancelReplaceAllowed),
       filters: {
         lotSize: filters.find((filter) => filter.filterType === 'LOT_SIZE'),
         priceFilter: filters.find(
@@ -186,6 +189,72 @@ export class BinanceSpotClientService {
     return this.signedRequest('POST', '/api/v3/order', credentials, params)
   }
 
+  async cancelReplaceOrder(
+    userId: string,
+    payload: {
+      symbol: string
+      cancelOrderId?: string
+      cancelOrigClientOrderId?: string
+      cancelReplaceMode: 'STOP_ON_FAILURE'
+      side: 'BUY' | 'SELL'
+      type: 'LIMIT'
+      timeInForce: 'GTC'
+      quantity: string
+      price: string
+    },
+  ) {
+    const credentials = await this.getCredentials(userId)
+    const exchangeInfo = await this.getExchangeInfo(payload.symbol)
+    await this.preflightCheck(
+      {
+        symbol: payload.symbol,
+        side: payload.side,
+        type: payload.type,
+        quantity: payload.quantity,
+        price: payload.price,
+      },
+      credentials,
+    )
+
+    if (!exchangeInfo.cancelReplaceAllowed) {
+      const cancel = await this.cancelOrder(userId, {
+        symbol: payload.symbol,
+        orderId: payload.cancelOrderId,
+        origClientOrderId: payload.cancelOrigClientOrderId,
+      })
+      const newOrder = await this.placeOrder(userId, {
+        symbol: payload.symbol,
+        side: payload.side,
+        type: 'LIMIT',
+        quantity: payload.quantity,
+        price: payload.price,
+        timeInForce: payload.timeInForce,
+      })
+
+      return { mode: 'FALLBACK_CANCEL_NEW', cancel, newOrder }
+    }
+
+    const params: SignedRequestParams = {
+      symbol: payload.symbol,
+      cancelOrderId: payload.cancelOrderId,
+      cancelOrigClientOrderId: payload.cancelOrigClientOrderId,
+      cancelReplaceMode: payload.cancelReplaceMode,
+      side: payload.side,
+      type: payload.type,
+      timeInForce: payload.timeInForce,
+      quantity: payload.quantity,
+      price: payload.price,
+      newClientOrderId: randomUUID(),
+    }
+
+    return this.signedRequest(
+      'POST',
+      '/api/v3/order/cancelReplace',
+      credentials,
+      params,
+    )
+  }
+
   async cancelOrder(
     userId: string,
     payload: { symbol: string; orderId?: string; origClientOrderId?: string },
@@ -213,6 +282,46 @@ export class BinanceSpotClientService {
     return this.signedRequest('GET', '/api/v3/order', credentials, payload)
   }
 
+  async getMyTrades(
+    userId: string,
+    payload: {
+      symbol: string
+      startTime?: number
+      endTime?: number
+      fromId?: number
+      limit?: number
+    },
+  ) {
+    const credentials = await this.getCredentials(userId)
+    const data = await this.signedRequest<
+      Array<{
+        id: number
+        orderId: number
+        price: string
+        qty: string
+        quoteQty: string
+        commission: string
+        commissionAsset: string
+        time: number
+        isBuyer: boolean
+        isMaker: boolean
+      }>
+    >('GET', '/api/v3/myTrades', credentials, payload)
+
+    return data.map((trade) => ({
+      id: trade.id,
+      orderId: trade.orderId,
+      price: trade.price,
+      qty: trade.qty,
+      quoteQty: trade.quoteQty,
+      commission: trade.commission,
+      commissionAsset: trade.commissionAsset,
+      time: trade.time,
+      isBuyer: trade.isBuyer,
+      isMaker: trade.isMaker,
+    }))
+  }
+
   private async getCredentials(userId: string) {
     const credentials =
       await this.binanceService.getDecryptedCredentials(userId)
@@ -230,19 +339,16 @@ export class BinanceSpotClientService {
   ): Promise<T> {
     const timestamp = await this.getServerTime()
     const recvWindow = params.recvWindow ?? DEFAULT_RECV_WINDOW
-    const queryParams = new URLSearchParams()
+    const payload: Record<string, string | number | boolean> = {}
 
     Object.entries(params).forEach(([key, value]) => {
       if (value === undefined) return
-      queryParams.append(key, String(value))
+      payload[key] = value
     })
-    queryParams.append('timestamp', String(timestamp))
-    queryParams.append('recvWindow', String(recvWindow))
+    payload.timestamp = timestamp
+    payload.recvWindow = recvWindow
 
-    const signature = createHmac('sha256', credentials.apiSecret)
-      .update(queryParams.toString())
-      .digest('hex')
-    const signedQuery = `${queryParams.toString()}&signature=${signature}`
+    const signedQuery = this.buildSignedQuery(payload, credentials.apiSecret)
     const url = `${this.getBaseUrl()}${path}?${signedQuery}`
 
     const response = await fetch(url, {
@@ -264,6 +370,22 @@ export class BinanceSpotClientService {
     }
 
     return (await response.json()) as T
+  }
+
+  private buildSignedQuery(
+    params: Record<string, string | number | boolean>,
+    secret: string,
+  ) {
+    const queryParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      queryParams.append(key, String(value))
+    })
+    const encodedQuery = queryParams.toString()
+    // Signature must be computed over the percent-encoded query string.
+    const signature = createHmac('sha256', secret)
+      .update(encodedQuery)
+      .digest('hex')
+    return `${encodedQuery}&signature=${signature}`
   }
 
   private async preflightCheck(

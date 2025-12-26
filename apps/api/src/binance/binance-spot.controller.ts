@@ -17,10 +17,14 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { ZodValidationPipe } from '../common/zod-validation.pipe'
 import {
   binanceSpotCancelOrderSchema,
+  binanceSpotCancelReplaceSchema,
+  binanceSpotMyTradesSchema,
   binanceSpotOpenOrdersSchema,
   binanceSpotPlaceOrderSchema,
   binanceSpotQueryOrderSchema,
   type BinanceSpotCancelOrderDto,
+  type BinanceSpotCancelReplaceDto,
+  type BinanceSpotMyTradesQuery,
   type BinanceSpotOpenOrdersQuery,
   type BinanceSpotPlaceOrderDto,
   type BinanceSpotQueryOrderQuery,
@@ -94,6 +98,27 @@ export class BinanceSpotController {
     }
   }
 
+  @Post('order/cancel-replace')
+  async cancelReplaceOrder(
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(binanceSpotCancelReplaceSchema))
+    body: BinanceSpotCancelReplaceDto,
+  ) {
+    const user = req.user as { id: string }
+    const payload = {
+      ...body,
+      symbol: body.symbol.trim().toUpperCase(),
+      timeInForce: body.timeInForce ?? 'GTC',
+      cancelReplaceMode: body.cancelReplaceMode ?? 'STOP_ON_FAILURE',
+    }
+
+    try {
+      return await this.binanceSpotClient.cancelReplaceOrder(user.id, payload)
+    } catch (error) {
+      this.handleBinanceError(error)
+    }
+  }
+
   @Get('order')
   async queryOrder(
     @Req() req: Request,
@@ -103,6 +128,20 @@ export class BinanceSpotController {
     const user = req.user as { id: string }
     try {
       return await this.binanceSpotClient.queryOrder(user.id, query)
+    } catch (error) {
+      this.handleBinanceError(error)
+    }
+  }
+
+  @Get('my-trades')
+  async myTrades(
+    @Req() req: Request,
+    @Query(new ZodValidationPipe(binanceSpotMyTradesSchema))
+    query: BinanceSpotMyTradesQuery,
+  ) {
+    const user = req.user as { id: string }
+    try {
+      return await this.binanceSpotClient.getMyTrades(user.id, query)
     } catch (error) {
       this.handleBinanceError(error)
     }
