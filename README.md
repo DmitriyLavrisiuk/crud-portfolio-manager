@@ -1,4 +1,4 @@
-# CRUD Portfolio Manager (v0.3.0)
+# CRUD Portfolio Manager (v0.4.0)
 
 Monorepo scaffold with a Vite + React web app and a NestJS API.
 
@@ -63,6 +63,15 @@ pnpm dev
 
 - The first registered user becomes `admin`.
 - After login as admin, open `http://localhost:5173/admin/users` to manage users and roles.
+
+## Transactions (v0.4.0)
+
+- Create: `POST http://localhost:4000/transactions`
+- List: `GET http://localhost:4000/transactions?from&to&symbol&type&page&limit`
+- Get by id: `GET http://localhost:4000/transactions/:id`
+- Update: `PATCH http://localhost:4000/transactions/:id`
+- Delete: `DELETE http://localhost:4000/transactions/:id`
+- UI: `http://localhost:5173/transactions`
 
 ## Troubleshooting
 

@@ -6,6 +6,7 @@ import { MongooseModule } from '@nestjs/mongoose'
 import { AppController } from './app.controller'
 import { AuthModule } from './auth/auth.module'
 import { RefreshTokensModule } from './refresh-tokens/refresh-tokens.module'
+import { TransactionsModule } from './transactions/transactions.module'
 import { UsersModule } from './users/users.module'
 
 @Module({
@@ -14,20 +15,21 @@ import { UsersModule } from './users/users.module'
       isGlobal: true,
       envFilePath: [
         path.resolve(__dirname, '..', '.env'),
-        path.resolve(__dirname, '..', '..', '.env')
+        path.resolve(__dirname, '..', '..', '.env'),
       ],
-      expandVariables: true
+      expandVariables: true,
     }),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGO_URI')
-      })
+        uri: configService.get<string>('MONGO_URI'),
+      }),
     }),
     UsersModule,
     RefreshTokensModule,
-    AuthModule
+    AuthModule,
+    TransactionsModule,
   ],
-  controllers: [AppController]
+  controllers: [AppController],
 })
 export class AppModule {}

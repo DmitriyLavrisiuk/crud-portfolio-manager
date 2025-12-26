@@ -7,6 +7,7 @@ import DashboardPage from './routes/DashboardPage'
 import LoginPage from './routes/LoginPage'
 import RegisterPage from './routes/RegisterPage'
 import SettingsPage from './routes/SettingsPage'
+import TransactionsPage from './routes/TransactionsPage'
 
 function Layout() {
   const { user } = useAuth()
@@ -28,6 +29,9 @@ function Layout() {
           </NavLink>
           <NavLink to="/settings" className={linkClass}>
             Settings
+          </NavLink>
+          <NavLink to="/transactions" className={linkClass}>
+            Transactions
           </NavLink>
           {user?.role === 'admin' && (
             <NavLink to="/admin/users" className={linkClass}>
@@ -54,6 +58,14 @@ function Layout() {
             element={
               <ProtectedRoute>
                 <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/transactions"
+            element={
+              <ProtectedRoute>
+                <TransactionsPage />
               </ProtectedRoute>
             }
           />
