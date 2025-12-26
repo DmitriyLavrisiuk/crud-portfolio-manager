@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -180,7 +180,6 @@ function parseBalanceValue(value: string) {
 export default function SpotPage() {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
-  const [symbol, setSymbol] = useState('BTCUSDT')
   const [orderError, setOrderError] = useState<string | null>(null)
   const [openOrdersError, setOpenOrdersError] = useState<string | null>(null)
   const [cancelTarget, setCancelTarget] = useState<BinanceSpotOrder | null>(
@@ -192,22 +191,37 @@ export default function SpotPage() {
     queryFn: () => getSpotAccount({ accessToken, onUnauthorized: refresh }),
   })
 
-  const openOrdersQuery = useQuery({
-    queryKey: ['spotOpenOrders', symbol],
-    queryFn: () =>
-      getSpotOpenOrders(symbol, { accessToken, onUnauthorized: refresh }),
-    enabled: false,
-  })
-
   const orderForm = useForm<SpotOrderFormValues>({
     resolver: zodResolver(spotOrderSchema),
     defaultValues: defaultOrderValues,
+    mode: 'onSubmit',
+    reValidateMode: 'onSubmit',
   })
 
-  const orderType = orderForm.watch('type')
-  const orderSide = orderForm.watch('side')
-  const marketBuyMode = orderForm.watch('marketBuyMode') ?? 'QUOTE'
-  const symbolField = orderForm.register('symbol')
+  const orderType = useWatch({ control: orderForm.control, name: 'type' })
+  const orderSide = useWatch({ control: orderForm.control, name: 'side' })
+  const marketBuyMode =
+    useWatch({ control: orderForm.control, name: 'marketBuyMode' }) ?? 'QUOTE'
+  const symbolValue = useWatch({ control: orderForm.control, name: 'symbol' })
+  const normalizedSymbol = String(symbolValue ?? '')
+    .trim()
+    .toUpperCase()
+  const symbolField = orderForm.register('symbol', {
+    setValueAs: (value) =>
+      String(value ?? '')
+        .toUpperCase()
+        .trim(),
+  })
+
+  const openOrdersQuery = useQuery({
+    queryKey: ['spotOpenOrders', normalizedSymbol],
+    queryFn: () =>
+      getSpotOpenOrders(normalizedSymbol, {
+        accessToken,
+        onUnauthorized: refresh,
+      }),
+    enabled: false,
+  })
 
   const placeOrderMutation = useMutation({
     mutationFn: (values: SpotOrderFormValues) =>
@@ -235,7 +249,9 @@ export default function SpotPage() {
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['spotAccount'] })
-      queryClient.invalidateQueries({ queryKey: ['spotOpenOrders', symbol] })
+      queryClient.invalidateQueries({
+        queryKey: ['spotOpenOrders', normalizedSymbol],
+      })
       setOrderError(null)
     },
     onError: (error) => {
@@ -248,12 +264,14 @@ export default function SpotPage() {
   const cancelMutation = useMutation({
     mutationFn: (order: BinanceSpotOrder) =>
       cancelSpotOrder(
-        { symbol, orderId: order.orderId },
+        { symbol: normalizedSymbol, orderId: order.orderId },
         { accessToken, onUnauthorized: refresh },
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['spotAccount'] })
-      queryClient.invalidateQueries({ queryKey: ['spotOpenOrders', symbol] })
+      queryClient.invalidateQueries({
+        queryKey: ['spotOpenOrders', normalizedSymbol],
+      })
       setCancelTarget(null)
       setOpenOrdersError(null)
     },
@@ -293,12 +311,6 @@ export default function SpotPage() {
     ],
     getCoreRowModel: getCoreRowModel(),
   })
-
-  const handleSymbolChange = (value: string) => {
-    const next = value.trim().toUpperCase()
-    setSymbol(next)
-    orderForm.setValue('symbol', next, { shouldValidate: true })
-  }
 
   return (
     <section className="space-y-6">
@@ -362,14 +374,7 @@ export default function SpotPage() {
           >
             <div className="space-y-2">
               <Label htmlFor="spot-symbol">Symbol</Label>
-              <Input
-                id="spot-symbol"
-                name={symbolField.name}
-                ref={symbolField.ref}
-                onBlur={symbolField.onBlur}
-                value={symbol}
-                onChange={(event) => handleSymbolChange(event.target.value)}
-              />
+              <Input id="spot-symbol" {...symbolField} />
               {orderForm.formState.errors.symbol ? (
                 <p className="text-xs text-destructive">
                   {orderForm.formState.errors.symbol.message}
@@ -379,38 +384,40 @@ export default function SpotPage() {
 
             <div className="space-y-2">
               <Label>Side</Label>
-              <Select
-                value={orderForm.watch('side')}
-                onValueChange={(value) =>
-                  orderForm.setValue('side', value as 'BUY' | 'SELL')
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select side" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="BUY">BUY</SelectItem>
-                  <SelectItem value="SELL">SELL</SelectItem>
-                </SelectContent>
-              </Select>
+              <Controller
+                name="side"
+                control={orderForm.control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select side" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BUY">BUY</SelectItem>
+                      <SelectItem value="SELL">SELL</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
 
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select
-                value={orderForm.watch('type')}
-                onValueChange={(value) =>
-                  orderForm.setValue('type', value as 'MARKET' | 'LIMIT')
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MARKET">MARKET</SelectItem>
-                  <SelectItem value="LIMIT">LIMIT</SelectItem>
-                </SelectContent>
-              </Select>
+              <Controller
+                name="type"
+                control={orderForm.control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MARKET">MARKET</SelectItem>
+                      <SelectItem value="LIMIT">LIMIT</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
 
             {orderType === 'MARKET' && orderSide === 'BUY' ? (
@@ -539,7 +546,7 @@ export default function SpotPage() {
             <Button
               variant="outline"
               onClick={() => {
-                if (!symbol) {
+                if (!normalizedSymbol) {
                   setOpenOrdersError('Symbol is required.')
                   return
                 }
@@ -555,8 +562,17 @@ export default function SpotPage() {
             <Label htmlFor="spot-orders-symbol">Symbol</Label>
             <Input
               id="spot-orders-symbol"
-              value={symbol}
-              onChange={(event) => handleSymbolChange(event.target.value)}
+              value={normalizedSymbol}
+              onChange={(event) => {
+                orderForm.setValue(
+                  'symbol',
+                  event.target.value.toUpperCase().trim(),
+                  {
+                    shouldValidate: false,
+                    shouldDirty: true,
+                  },
+                )
+              }}
             />
           </div>
         </CardHeader>
