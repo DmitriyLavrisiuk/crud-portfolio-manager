@@ -17,6 +17,13 @@ Copy example env files and adjust if needed:
 - `apps/web/.env.example` -> `apps/web/.env`
 - `apps/api/.env.example` -> `apps/api/.env`
 
+### API env (auth)
+- `JWT_ACCESS_SECRET`
+- `JWT_REFRESH_SECRET`
+- `JWT_ACCESS_TTL` (e.g. `15m`)
+- `JWT_REFRESH_TTL` (e.g. `7d`)
+- `COOKIE_SECURE` (`true`/`false`)
+
 ## Run database
 ```bash
 pnpm dev:db
@@ -34,6 +41,13 @@ pnpm dev
 
 ## Health check
 - API: `GET http://localhost:4000/health`
+
+## Auth flow (v0.2.0)
+- Register: `POST http://localhost:4000/auth/register`
+- Login: `POST http://localhost:4000/auth/login`
+- Refresh (cookie): `POST http://localhost:4000/auth/refresh`
+- Logout: `POST http://localhost:4000/auth/logout`
+- Me (access token): `GET http://localhost:4000/auth/me`
 
 ## Troubleshooting
 - If API fails to start, confirm `MONGO_URI` is set in `apps/api/.env`.

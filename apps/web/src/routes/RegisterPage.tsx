@@ -17,9 +17,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { register: registerUser } = useAuth()
   const [error, setError] = useState<string | null>(null)
 
   const {
@@ -37,10 +37,10 @@ export default function LoginPage() {
   const onSubmit = async (data: AuthFormData) => {
     setError(null)
     try {
-      await login(data.email, data.password)
+      await registerUser(data.email, data.password)
       navigate('/dashboard')
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Login failed'
+      const message = err instanceof Error ? err.message : 'Registration failed'
       setError(message)
     }
   }
@@ -48,8 +48,8 @@ export default function LoginPage() {
   return (
     <Card className="mx-auto max-w-md">
       <CardHeader>
-        <CardTitle>Login</CardTitle>
-        <CardDescription>Access your account with email.</CardDescription>
+        <CardTitle>Register</CardTitle>
+        <CardDescription>Create an account to continue.</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
@@ -73,12 +73,15 @@ export default function LoginPage() {
             <p className="text-sm text-destructive">{error}</p>
           ) : null}
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Signing in...' : 'Sign in'}
+            {isSubmitting ? 'Creating account...' : 'Create account'}
           </Button>
         </form>
       </CardContent>
       <CardFooter className="text-sm text-muted-foreground">
-        No account? <Link className="ml-1 text-primary" to="/register">Register</Link>
+        Already have an account?
+        <Link className="ml-1 text-primary" to="/login">
+          Login
+        </Link>
       </CardFooter>
     </Card>
   )
