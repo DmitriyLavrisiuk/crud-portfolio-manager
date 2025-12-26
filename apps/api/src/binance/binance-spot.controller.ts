@@ -25,7 +25,10 @@ import {
   type BinanceSpotPlaceOrderDto,
   type BinanceSpotQueryOrderQuery,
 } from './dto/binance.schemas'
-import { BinanceSpotClientService } from './binance-spot-client.service'
+import {
+  BinanceFilterException,
+  BinanceSpotClientService,
+} from './binance-spot-client.service'
 
 @UseGuards(JwtAuthGuard)
 @Controller('binance/spot')
@@ -106,6 +109,10 @@ export class BinanceSpotController {
   }
 
   private handleBinanceError(error: unknown): never {
+    if (error instanceof BinanceFilterException) {
+      throw new BadRequestException(error.payload)
+    }
+
     const message =
       error instanceof Error ? error.message : 'Binance request failed.'
 

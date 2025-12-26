@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState, type ChangeEvent } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -161,39 +161,91 @@ const defaultOrderValues: SpotOrderFormValues = {
   marketBuyMode: 'QUOTE',
 }
 
-const columns: ColumnDef<BinanceSpotOrder>[] = [
-  { accessorKey: 'orderId', header: 'Order ID' },
-  { accessorKey: 'side', header: 'Side' },
-  { accessorKey: 'type', header: 'Type' },
-  { accessorKey: 'price', header: 'Price' },
-  { accessorKey: 'origQty', header: 'Orig Qty' },
-  { accessorKey: 'executedQty', header: 'Executed' },
-  { accessorKey: 'status', header: 'Status' },
-  { accessorKey: 'timeInForce', header: 'TIF' },
-]
-
 function parseBalanceValue(value: string) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-export default function SpotPage() {
-  const { accessToken, refresh } = useAuth()
-  const queryClient = useQueryClient()
-  const [orderError, setOrderError] = useState<string | null>(null)
-  const [openOrdersError, setOpenOrdersError] = useState<string | null>(null)
-  const [openOrdersSymbolInput, setOpenOrdersSymbolInput] = useState('BTCUSDT')
-  const [openOrdersSymbolQuery, setOpenOrdersSymbolQuery] = useState<
-    string | null
-  >(null)
-  const [cancelTarget, setCancelTarget] = useState<BinanceSpotOrder | null>(
-    null,
-  )
+type BinanceFilterFailure = {
+  code: 'BINANCE_FILTER_FAILURE'
+  filter: 'NOTIONAL' | 'LOT_SIZE' | 'PRICE_FILTER'
+  symbol: string
+  message: string
+  details?: {
+    minNotional?: string
+    notional?: string
+    quoteAsset?: string
+    baseAsset?: string
+  }
+}
 
+type ApiErrorWithData = Error & {
+  data?: BinanceFilterFailure
+}
+
+const AccountCard = memo(function AccountCard() {
+  const { accessToken, refresh } = useAuth()
   const accountQuery = useQuery({
     queryKey: ['spotAccount'],
     queryFn: () => getSpotAccount({ accessToken, onUnauthorized: refresh }),
   })
+
+  const balances = useMemo(() => {
+    const items = accountQuery.data?.balances ?? []
+    return items.filter(
+      (balance) =>
+        parseBalanceValue(balance.free) > 0 ||
+        parseBalanceValue(balance.locked) > 0,
+    )
+  }, [accountQuery.data?.balances])
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>Account balances</CardTitle>
+        <Button
+          variant="outline"
+          onClick={() => accountQuery.refetch()}
+          disabled={accountQuery.isFetching}
+        >
+          Refresh
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {accountQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading balances...</p>
+        ) : accountQuery.error instanceof Error ? (
+          <p className="text-sm text-destructive">
+            {accountQuery.error.message}
+          </p>
+        ) : balances.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No balances with available funds.
+          </p>
+        ) : (
+          <div className="grid gap-2 text-sm">
+            {balances.map((balance) => (
+              <div
+                key={balance.asset}
+                className="flex flex-wrap items-center justify-between rounded-md border border-border px-3 py-2"
+              >
+                <span className="font-medium">{balance.asset}</span>
+                <span className="text-muted-foreground">
+                  Free {balance.free} · Locked {balance.locked}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+})
+
+const PlaceOrderCard = memo(function PlaceOrderCard() {
+  const { accessToken, refresh } = useAuth()
+  const queryClient = useQueryClient()
+  const [orderError, setOrderError] = useState<string | null>(null)
 
   const orderForm = useForm<SpotOrderFormValues>({
     resolver: zodResolver(spotOrderSchema),
@@ -206,25 +258,12 @@ export default function SpotPage() {
   const orderSide = useWatch({ control: orderForm.control, name: 'side' })
   const marketBuyMode =
     useWatch({ control: orderForm.control, name: 'marketBuyMode' }) ?? 'QUOTE'
+
   const symbolField = orderForm.register('symbol', {
     setValueAs: (value) =>
       String(value ?? '')
         .toUpperCase()
         .trim(),
-  })
-
-  const openOrdersQuery = useQuery({
-    queryKey: ['spotOpenOrders', openOrdersSymbolQuery],
-    queryFn: () => {
-      if (!openOrdersSymbolQuery) {
-        return Promise.resolve([])
-      }
-      return getSpotOpenOrders(openOrdersSymbolQuery, {
-        accessToken,
-        onUnauthorized: refresh,
-      })
-    },
-    enabled: Boolean(openOrdersSymbolQuery),
   })
 
   const placeOrderMutation = useMutation({
@@ -255,12 +294,268 @@ export default function SpotPage() {
       queryClient.invalidateQueries({ queryKey: ['spotAccount'] })
       queryClient.invalidateQueries({ queryKey: ['spotOpenOrders'] })
       setOrderError(null)
+      orderForm.clearErrors()
     },
     onError: (error) => {
+      const apiError = error as ApiErrorWithData
+      if (apiError.data?.code === 'BINANCE_FILTER_FAILURE') {
+        const { filter, symbol, details } = apiError.data
+        if (filter === 'NOTIONAL') {
+          const minNotional = details?.minNotional ?? '—'
+          const notional = details?.notional ?? '—'
+          const quoteAsset = details?.quoteAsset ?? ''
+          const message = `Минимальная сумма сделки для ${symbol}: ${minNotional} ${quoteAsset}. У тебя: ${notional}.`
+          setOrderError(message)
+
+          const values = orderForm.getValues()
+          if (
+            values.type === 'MARKET' &&
+            values.side === 'BUY' &&
+            values.marketBuyMode === 'QUOTE'
+          ) {
+            orderForm.setError('quoteOrderQty', { message })
+            return
+          }
+
+          if (values.type === 'LIMIT') {
+            orderForm.setError('price', { message })
+            return
+          }
+
+          orderForm.setError('quantity', { message })
+          return
+        }
+      }
+
       setOrderError(
         error instanceof Error ? error.message : 'Failed to place order.',
       )
     },
+  })
+
+  const handleSubmit = useCallback(
+    (values: SpotOrderFormValues) => {
+      placeOrderMutation.mutate(values)
+    },
+    [placeOrderMutation],
+  )
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Place order</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form
+          className="grid gap-4 md:grid-cols-2"
+          onSubmit={orderForm.handleSubmit(handleSubmit)}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="spot-symbol">Symbol</Label>
+            <Input id="spot-symbol" {...symbolField} />
+            {orderForm.formState.errors.symbol ? (
+              <p className="text-xs text-destructive">
+                {orderForm.formState.errors.symbol.message}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Side</Label>
+            <Controller
+              name="side"
+              control={orderForm.control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select side" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BUY">BUY</SelectItem>
+                    <SelectItem value="SELL">SELL</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Type</Label>
+            <Controller
+              name="type"
+              control={orderForm.control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MARKET">MARKET</SelectItem>
+                    <SelectItem value="LIMIT">LIMIT</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+
+          {orderType === 'MARKET' && orderSide === 'BUY' ? (
+            <div className="space-y-3 md:col-span-2">
+              <div className="flex flex-wrap items-center gap-4">
+                <Label>Market buy mode</Label>
+                {(() => {
+                  const field = orderForm.register('marketBuyMode')
+                  return (
+                    <>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          value="QUOTE"
+                          name={field.name}
+                          ref={field.ref}
+                          checked={marketBuyMode === 'QUOTE'}
+                          onChange={(event) => {
+                            field.onChange(event)
+                            orderForm.setValue('quantity', '', {
+                              shouldValidate: false,
+                            })
+                          }}
+                        />
+                        Spend (quote)
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          value="BASE"
+                          name={field.name}
+                          ref={field.ref}
+                          checked={marketBuyMode === 'BASE'}
+                          onChange={(event) => {
+                            field.onChange(event)
+                            orderForm.setValue('quoteOrderQty', '', {
+                              shouldValidate: false,
+                            })
+                          }}
+                        />
+                        Buy amount (base)
+                      </label>
+                    </>
+                  )
+                })()}
+              </div>
+
+              {marketBuyMode === 'QUOTE' ? (
+                <div className="space-y-2">
+                  <Label htmlFor="spot-quote-qty">Spend (quote)</Label>
+                  <Input
+                    id="spot-quote-qty"
+                    {...orderForm.register('quoteOrderQty')}
+                    placeholder="100"
+                  />
+                  {orderForm.formState.errors.quoteOrderQty ? (
+                    <p className="text-xs text-destructive">
+                      {orderForm.formState.errors.quoteOrderQty.message}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="spot-quantity">Quantity</Label>
+                  <Input
+                    id="spot-quantity"
+                    {...orderForm.register('quantity')}
+                    placeholder="0.01"
+                  />
+                  {orderForm.formState.errors.quantity ? (
+                    <p className="text-xs text-destructive">
+                      {orderForm.formState.errors.quantity.message}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="spot-quantity">Quantity</Label>
+              <Input
+                id="spot-quantity"
+                {...orderForm.register('quantity')}
+                placeholder="0.01"
+              />
+              {orderForm.formState.errors.quantity ? (
+                <p className="text-xs text-destructive">
+                  {orderForm.formState.errors.quantity.message}
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {orderType === 'LIMIT' ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="spot-price">Price</Label>
+                <Input
+                  id="spot-price"
+                  {...orderForm.register('price')}
+                  placeholder="10000"
+                />
+                {orderForm.formState.errors.price ? (
+                  <p className="text-xs text-destructive">
+                    {orderForm.formState.errors.price.message}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="spot-tif">Time in force</Label>
+                <Input id="spot-tif" value="GTC" disabled />
+              </div>
+            </>
+          ) : null}
+
+          <div className="md:col-span-2 flex items-center gap-3">
+            <Button type="submit" disabled={placeOrderMutation.isPending}>
+              Place order
+            </Button>
+            {placeOrderMutation.isPending ? (
+              <span className="text-xs text-muted-foreground">
+                Sending order...
+              </span>
+            ) : null}
+          </div>
+        </form>
+
+        {orderError ? (
+          <p className="text-sm text-destructive">{orderError}</p>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+})
+
+const OpenOrdersCard = memo(function OpenOrdersCard() {
+  const { accessToken, refresh } = useAuth()
+  const queryClient = useQueryClient()
+  const [openOrdersError, setOpenOrdersError] = useState<string | null>(null)
+  const [openOrdersSymbolInput, setOpenOrdersSymbolInput] = useState('BTCUSDT')
+  const [openOrdersSymbolQuery, setOpenOrdersSymbolQuery] = useState<
+    string | null
+  >(null)
+  const [cancelTarget, setCancelTarget] = useState<BinanceSpotOrder | null>(
+    null,
+  )
+
+  const openOrdersQuery = useQuery({
+    queryKey: ['spotOpenOrders', openOrdersSymbolQuery],
+    queryFn: () => {
+      if (!openOrdersSymbolQuery) {
+        return Promise.resolve([])
+      }
+      return getSpotOpenOrders(openOrdersSymbolQuery, {
+        accessToken,
+        onUnauthorized: refresh,
+      })
+    },
+    enabled: Boolean(openOrdersSymbolQuery),
   })
 
   const cancelMutation = useMutation({
@@ -285,19 +580,16 @@ export default function SpotPage() {
     },
   })
 
-  const balances = useMemo(() => {
-    const items = accountQuery.data?.balances ?? []
-    return items.filter(
-      (balance) =>
-        parseBalanceValue(balance.free) > 0 ||
-        parseBalanceValue(balance.locked) > 0,
-    )
-  }, [accountQuery.data?.balances])
-
-  const table = useReactTable({
-    data: openOrdersQuery.data ?? [],
-    columns: [
-      ...columns,
+  const columns = useMemo<ColumnDef<BinanceSpotOrder>[]>(
+    () => [
+      { accessorKey: 'orderId', header: 'Order ID' },
+      { accessorKey: 'side', header: 'Side' },
+      { accessorKey: 'type', header: 'Type' },
+      { accessorKey: 'price', header: 'Price' },
+      { accessorKey: 'origQty', header: 'Orig Qty' },
+      { accessorKey: 'executedQty', header: 'Executed' },
+      { accessorKey: 'status', header: 'Status' },
+      { accessorKey: 'timeInForce', header: 'TIF' },
       {
         id: 'actions',
         header: 'Actions',
@@ -312,347 +604,118 @@ export default function SpotPage() {
         ),
       },
     ],
+    [],
+  )
+
+  const table = useReactTable({
+    data: openOrdersQuery.data ?? [],
+    columns,
     getCoreRowModel: getCoreRowModel(),
   })
 
-  return (
-    <section className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Spot trading</h1>
-        <p className="text-muted-foreground">
-          Testnet balances and orders via Binance Spot API.
-        </p>
-      </div>
+  const handleLoad = useCallback(() => {
+    const nextSymbol = openOrdersSymbolInput.trim().toUpperCase()
+    if (!nextSymbol) {
+      setOpenOrdersError('Symbol is required.')
+      return
+    }
+    setOpenOrdersError(null)
+    setOpenOrdersSymbolQuery(nextSymbol)
+  }, [openOrdersSymbolInput])
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Account balances</CardTitle>
+  const handleSymbolChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setOpenOrdersSymbolInput(event.target.value)
+    },
+    [],
+  )
+
+  return (
+    <Card>
+      <CardHeader className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <CardTitle>Open orders</CardTitle>
           <Button
             variant="outline"
-            onClick={() => accountQuery.refetch()}
-            disabled={accountQuery.isFetching}
+            onClick={handleLoad}
+            disabled={openOrdersQuery.isFetching}
           >
-            Refresh
+            Load
           </Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {accountQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading balances...</p>
-          ) : accountQuery.error instanceof Error ? (
-            <p className="text-sm text-destructive">
-              {accountQuery.error.message}
-            </p>
-          ) : balances.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No balances with available funds.
-            </p>
-          ) : (
-            <div className="grid gap-2 text-sm">
-              {balances.map((balance) => (
-                <div
-                  key={balance.asset}
-                  className="flex flex-wrap items-center justify-between rounded-md border border-border px-3 py-2"
-                >
-                  <span className="font-medium">{balance.asset}</span>
-                  <span className="text-muted-foreground">
-                    Free {balance.free} · Locked {balance.locked}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Place order</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form
-            className="grid gap-4 md:grid-cols-2"
-            onSubmit={orderForm.handleSubmit((values) =>
-              placeOrderMutation.mutate(values),
-            )}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="spot-symbol">Symbol</Label>
-              <Input id="spot-symbol" {...symbolField} />
-              {orderForm.formState.errors.symbol ? (
-                <p className="text-xs text-destructive">
-                  {orderForm.formState.errors.symbol.message}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Side</Label>
-              <Controller
-                name="side"
-                control={orderForm.control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select side" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="BUY">BUY</SelectItem>
-                      <SelectItem value="SELL">SELL</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Controller
-                name="type"
-                control={orderForm.control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MARKET">MARKET</SelectItem>
-                      <SelectItem value="LIMIT">LIMIT</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-
-            {orderType === 'MARKET' && orderSide === 'BUY' ? (
-              <div className="space-y-3 md:col-span-2">
-                <div className="flex flex-wrap items-center gap-4">
-                  <Label>Market buy mode</Label>
-                  {(() => {
-                    const field = orderForm.register('marketBuyMode')
-                    return (
-                      <>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            value="QUOTE"
-                            name={field.name}
-                            ref={field.ref}
-                            checked={marketBuyMode === 'QUOTE'}
-                            onChange={(event) => {
-                              field.onChange(event)
-                              orderForm.setValue('quantity', '', {
-                                shouldValidate: false,
-                              })
-                            }}
-                          />
-                          Spend (quote)
-                        </label>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            value="BASE"
-                            name={field.name}
-                            ref={field.ref}
-                            checked={marketBuyMode === 'BASE'}
-                            onChange={(event) => {
-                              field.onChange(event)
-                              orderForm.setValue('quoteOrderQty', '', {
-                                shouldValidate: false,
-                              })
-                            }}
-                          />
-                          Buy amount (base)
-                        </label>
-                      </>
-                    )
-                  })()}
-                </div>
-
-                {marketBuyMode === 'QUOTE' ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="spot-quote-qty">Spend (quote)</Label>
-                    <Input
-                      id="spot-quote-qty"
-                      {...orderForm.register('quoteOrderQty')}
-                      placeholder="100"
-                    />
-                    {orderForm.formState.errors.quoteOrderQty ? (
-                      <p className="text-xs text-destructive">
-                        {orderForm.formState.errors.quoteOrderQty.message}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label htmlFor="spot-quantity">Quantity</Label>
-                    <Input
-                      id="spot-quantity"
-                      {...orderForm.register('quantity')}
-                      placeholder="0.01"
-                    />
-                    {orderForm.formState.errors.quantity ? (
-                      <p className="text-xs text-destructive">
-                        {orderForm.formState.errors.quantity.message}
-                      </p>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Label htmlFor="spot-quantity">Quantity</Label>
-                <Input
-                  id="spot-quantity"
-                  {...orderForm.register('quantity')}
-                  placeholder="0.01"
-                />
-                {orderForm.formState.errors.quantity ? (
-                  <p className="text-xs text-destructive">
-                    {orderForm.formState.errors.quantity.message}
-                  </p>
-                ) : null}
-              </div>
-            )}
-
-            {orderType === 'LIMIT' ? (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="spot-price">Price</Label>
-                  <Input
-                    id="spot-price"
-                    {...orderForm.register('price')}
-                    placeholder="10000"
-                  />
-                  {orderForm.formState.errors.price ? (
-                    <p className="text-xs text-destructive">
-                      {orderForm.formState.errors.price.message}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="spot-tif">Time in force</Label>
-                  <Input id="spot-tif" value="GTC" disabled />
-                </div>
-              </>
-            ) : null}
-
-            <div className="md:col-span-2 flex items-center gap-3">
-              <Button type="submit" disabled={placeOrderMutation.isPending}>
-                Place order
-              </Button>
-              {placeOrderMutation.isPending ? (
-                <span className="text-xs text-muted-foreground">
-                  Sending order...
-                </span>
-              ) : null}
-            </div>
-          </form>
-
-          {orderError ? (
-            <p className="text-sm text-destructive">{orderError}</p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <CardTitle>Open orders</CardTitle>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const nextSymbol = openOrdersSymbolInput.trim().toUpperCase()
-                if (!nextSymbol) {
-                  setOpenOrdersError('Symbol is required.')
-                  return
-                }
-                setOpenOrdersError(null)
-                setOpenOrdersSymbolQuery(nextSymbol)
-                orderForm.setValue('symbol', nextSymbol, {
-                  shouldValidate: false,
-                  shouldDirty: true,
-                })
-              }}
-              disabled={openOrdersQuery.isFetching}
-            >
-              Load
-            </Button>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="spot-orders-symbol">Symbol</Label>
-            <Input
-              id="spot-orders-symbol"
-              value={openOrdersSymbolInput}
-              onChange={(event) => setOpenOrdersSymbolInput(event.target.value)}
-            />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {openOrdersQuery.isFetching ? (
-            <p className="text-sm text-muted-foreground">
-              Loading open orders...
-            </p>
-          ) : openOrdersQuery.data && openOrdersQuery.data.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No open orders.</p>
-          ) : (
-            <div className="rounded-md border border-border">
-              <Table>
-                <TableHeader>
-                  {table.getHeaderGroups().map((group) => (
-                    <TableRow key={group.id}>
-                      {group.headers.map((header) => (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                        </TableHead>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="spot-orders-symbol">Symbol</Label>
+          <Input
+            id="spot-orders-symbol"
+            value={openOrdersSymbolInput}
+            onChange={handleSymbolChange}
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {openOrdersQuery.isFetching ? (
+          <p className="text-sm text-muted-foreground">
+            Loading open orders...
+          </p>
+        ) : openOrdersQuery.data && openOrdersQuery.data.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No open orders.</p>
+        ) : (
+          <div className="rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                {table.getHeaderGroups().map((group) => (
+                  <TableRow key={group.id}>
+                    {group.headers.map((header) => (
+                      <TableHead key={header.id}>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows.length ? (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow key={row.id}>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </TableCell>
                       ))}
                     </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows.length ? (
-                    table.getRowModel().rows.map((row) => (
-                      <TableRow key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        colSpan={table.getAllColumns().length}
-                        className="text-center text-sm text-muted-foreground"
-                      >
-                        Load open orders to see results.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={table.getAllColumns().length}
+                      className="text-center text-sm text-muted-foreground"
+                    >
+                      Load open orders to see results.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
-          {openOrdersError ? (
-            <p className="text-sm text-destructive">{openOrdersError}</p>
-          ) : null}
-          {openOrdersQuery.error instanceof Error ? (
-            <p className="text-sm text-destructive">
-              {openOrdersQuery.error.message}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+        {openOrdersError ? (
+          <p className="text-sm text-destructive">{openOrdersError}</p>
+        ) : null}
+        {openOrdersQuery.error instanceof Error ? (
+          <p className="text-sm text-destructive">
+            {openOrdersQuery.error.message}
+          </p>
+        ) : null}
+      </CardContent>
 
       <AlertDialog
         open={Boolean(cancelTarget)}
@@ -686,6 +749,23 @@ export default function SpotPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </Card>
+  )
+})
+
+export default function SpotPage() {
+  return (
+    <section className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold">Spot trading</h1>
+        <p className="text-muted-foreground">
+          Testnet balances and orders via Binance Spot API.
+        </p>
+      </div>
+
+      <AccountCard />
+      <PlaceOrderCard />
+      <OpenOrdersCard />
     </section>
   )
 }

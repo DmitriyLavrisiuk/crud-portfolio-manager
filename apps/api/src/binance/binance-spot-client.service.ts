@@ -15,8 +15,50 @@ type BinanceErrorPayload = {
 
 type SignedRequestParams = Record<string, string | number | undefined>
 
+type ExchangeInfoFilter = {
+  filterType: string
+  minQty?: string
+  maxQty?: string
+  stepSize?: string
+  minPrice?: string
+  maxPrice?: string
+  tickSize?: string
+  minNotional?: string
+}
+
+type ExchangeInfoSnapshot = {
+  baseAsset: string
+  quoteAsset: string
+  filters: {
+    lotSize?: ExchangeInfoFilter
+    priceFilter?: ExchangeInfoFilter
+    notional?: ExchangeInfoFilter
+  }
+}
+
+export class BinanceFilterException extends Error {
+  readonly payload: {
+    code: 'BINANCE_FILTER_FAILURE'
+    filter: 'NOTIONAL' | 'LOT_SIZE' | 'PRICE_FILTER'
+    symbol: string
+    message: string
+    details: Record<string, string>
+  }
+
+  constructor(payload: BinanceFilterException['payload']) {
+    super(payload.message)
+    this.payload = payload
+  }
+}
+
 @Injectable()
 export class BinanceSpotClientService {
+  private readonly exchangeInfoCache = new Map<
+    string,
+    { value: ExchangeInfoSnapshot; expiresAt: number }
+  >()
+  private readonly exchangeInfoTtlMs = 5 * 60 * 1000
+
   constructor(
     private configService: ConfigService,
     private binanceService: BinanceService,
@@ -67,6 +109,12 @@ export class BinanceSpotClientService {
   }
 
   async getExchangeInfo(symbol: string) {
+    const cacheKey = symbol.toUpperCase()
+    const cached = this.exchangeInfoCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value
+    }
+
     const response = await fetch(
       `${this.getBaseUrl()}/api/v3/exchangeInfo?symbol=${encodeURIComponent(
         symbol,
@@ -76,13 +124,38 @@ export class BinanceSpotClientService {
       throw new Error('Failed to fetch Binance exchange info.')
     }
     const data = (await response.json()) as {
-      symbols?: Array<{ baseAsset?: string; quoteAsset?: string }>
+      symbols?: Array<{
+        baseAsset?: string
+        quoteAsset?: string
+        filters?: ExchangeInfoFilter[]
+      }>
     }
     const info = data.symbols?.[0]
     if (!info?.baseAsset || !info?.quoteAsset) {
       throw new Error('Binance exchange info unavailable.')
     }
-    return { baseAsset: info.baseAsset, quoteAsset: info.quoteAsset }
+
+    const filters = info.filters ?? []
+    const snapshot: ExchangeInfoSnapshot = {
+      baseAsset: info.baseAsset,
+      quoteAsset: info.quoteAsset,
+      filters: {
+        lotSize: filters.find((filter) => filter.filterType === 'LOT_SIZE'),
+        priceFilter: filters.find(
+          (filter) => filter.filterType === 'PRICE_FILTER',
+        ),
+        notional:
+          filters.find((filter) => filter.filterType === 'NOTIONAL') ??
+          filters.find((filter) => filter.filterType === 'MIN_NOTIONAL'),
+      },
+    }
+
+    this.exchangeInfoCache.set(cacheKey, {
+      value: snapshot,
+      expiresAt: Date.now() + this.exchangeInfoTtlMs,
+    })
+
+    return snapshot
   }
 
   async placeOrder(
@@ -180,8 +253,14 @@ export class BinanceSpotClientService {
     })
 
     if (!response.ok) {
-      const message = await this.extractBinanceError(response)
-      throw new Error(message)
+      const error = await this.extractBinanceError(
+        response,
+        typeof params.symbol === 'string' ? params.symbol : undefined,
+      )
+      if (error instanceof BinanceFilterException) {
+        throw error
+      }
+      throw new Error(error)
     }
 
     return (await response.json()) as T
@@ -198,10 +277,32 @@ export class BinanceSpotClientService {
     },
     credentials: { apiKey: string; apiSecret: string },
   ) {
-    const { baseAsset, quoteAsset } = await this.getExchangeInfo(payload.symbol)
+    const { baseAsset, quoteAsset, filters } = await this.getExchangeInfo(
+      payload.symbol,
+    )
     const balances = await this.getAccountBalances(credentials)
     const freeBase = balances.get(baseAsset) ?? new Big(0)
     const freeQuote = balances.get(quoteAsset) ?? new Big(0)
+
+    if (payload.quantity && filters.lotSize) {
+      this.validateLotSize(payload.symbol, payload.quantity, filters.lotSize)
+    }
+
+    if (payload.price && filters.priceFilter) {
+      this.validatePriceFilter(
+        payload.symbol,
+        payload.price,
+        filters.priceFilter,
+      )
+    }
+
+    await this.validateNotional(
+      payload,
+      filters.notional,
+      payload.symbol,
+      quoteAsset,
+      baseAsset,
+    )
 
     if (payload.side === 'BUY') {
       if (payload.quoteOrderQty) {
@@ -243,6 +344,171 @@ export class BinanceSpotClientService {
     }
   }
 
+  private validateLotSize(
+    symbol: string,
+    quantity: string,
+    filter: ExchangeInfoFilter,
+  ) {
+    const qty = new Big(quantity)
+    const minQty = filter.minQty ? new Big(filter.minQty) : null
+    const maxQty = filter.maxQty ? new Big(filter.maxQty) : null
+    const stepSize = filter.stepSize ? new Big(filter.stepSize) : null
+
+    if (minQty && qty.lt(minQty)) {
+      throw new BinanceFilterException({
+        code: 'BINANCE_FILTER_FAILURE',
+        filter: 'LOT_SIZE',
+        symbol,
+        message: 'Filter failure: LOT_SIZE',
+        details: {
+          minQty: minQty.toString(),
+          quantity: qty.toString(),
+        },
+      })
+    }
+
+    if (maxQty && qty.gt(maxQty)) {
+      throw new BinanceFilterException({
+        code: 'BINANCE_FILTER_FAILURE',
+        filter: 'LOT_SIZE',
+        symbol,
+        message: 'Filter failure: LOT_SIZE',
+        details: {
+          maxQty: maxQty.toString(),
+          quantity: qty.toString(),
+        },
+      })
+    }
+
+    if (stepSize && minQty) {
+      const offset = qty.minus(minQty)
+      if (offset.lt(0) || !this.isStepAligned(offset, stepSize)) {
+        throw new BinanceFilterException({
+          code: 'BINANCE_FILTER_FAILURE',
+          filter: 'LOT_SIZE',
+          symbol,
+          message: 'Filter failure: LOT_SIZE',
+          details: {
+            stepSize: stepSize.toString(),
+            quantity: qty.toString(),
+          },
+        })
+      }
+    }
+  }
+
+  private validatePriceFilter(
+    symbol: string,
+    price: string,
+    filter: ExchangeInfoFilter,
+  ) {
+    const value = new Big(price)
+    const minPrice = filter.minPrice ? new Big(filter.minPrice) : null
+    const maxPrice = filter.maxPrice ? new Big(filter.maxPrice) : null
+    const tickSize = filter.tickSize ? new Big(filter.tickSize) : null
+
+    if (minPrice && value.lt(minPrice)) {
+      throw new BinanceFilterException({
+        code: 'BINANCE_FILTER_FAILURE',
+        filter: 'PRICE_FILTER',
+        symbol,
+        message: 'Filter failure: PRICE_FILTER',
+        details: {
+          minPrice: minPrice.toString(),
+          price: value.toString(),
+        },
+      })
+    }
+
+    if (maxPrice && value.gt(maxPrice)) {
+      throw new BinanceFilterException({
+        code: 'BINANCE_FILTER_FAILURE',
+        filter: 'PRICE_FILTER',
+        symbol,
+        message: 'Filter failure: PRICE_FILTER',
+        details: {
+          maxPrice: maxPrice.toString(),
+          price: value.toString(),
+        },
+      })
+    }
+
+    if (tickSize) {
+      if (!this.isStepAligned(value, tickSize)) {
+        throw new BinanceFilterException({
+          code: 'BINANCE_FILTER_FAILURE',
+          filter: 'PRICE_FILTER',
+          symbol,
+          message: 'Filter failure: PRICE_FILTER',
+          details: {
+            tickSize: tickSize.toString(),
+            price: value.toString(),
+          },
+        })
+      }
+    }
+  }
+
+  private async validateNotional(
+    payload: {
+      symbol: string
+      side: 'BUY' | 'SELL'
+      type: 'MARKET' | 'LIMIT'
+      quantity?: string
+      quoteOrderQty?: string
+      price?: string
+    },
+    filter: ExchangeInfoFilter | undefined,
+    symbol: string,
+    quoteAsset: string,
+    baseAsset: string,
+  ) {
+    if (!filter?.minNotional) return
+    const minNotional = new Big(filter.minNotional)
+    let notional: Big | null = null
+
+    if (payload.type === 'LIMIT' && payload.price && payload.quantity) {
+      notional = new Big(payload.price).times(payload.quantity)
+    }
+
+    if (payload.type === 'MARKET') {
+      if (payload.side === 'BUY') {
+        if (payload.quoteOrderQty) {
+          notional = new Big(payload.quoteOrderQty)
+        } else if (payload.quantity) {
+          const price = await this.getTickerPrice(payload.symbol)
+          notional = new Big(payload.quantity).times(price).times('1.002')
+        }
+      }
+
+      if (payload.side === 'SELL' && payload.quantity) {
+        const price = await this.getTickerPrice(payload.symbol)
+        notional = new Big(payload.quantity).times(price)
+      }
+    }
+
+    if (notional && notional.lt(minNotional)) {
+      throw new BinanceFilterException({
+        code: 'BINANCE_FILTER_FAILURE',
+        filter: 'NOTIONAL',
+        symbol,
+        message: 'Filter failure: NOTIONAL',
+        details: {
+          minNotional: minNotional.toString(),
+          notional: notional.toString(),
+          quoteAsset,
+          baseAsset,
+        },
+      })
+    }
+  }
+
+  private isStepAligned(value: Big, step: Big) {
+    if (step.eq(0)) return true
+    const steps = value.div(step)
+    return steps.round(0, 0).eq(steps)
+  }
+
   private async getAccountBalances(credentials: {
     apiKey: string
     apiSecret: string
@@ -269,13 +535,25 @@ export class BinanceSpotClientService {
     )
   }
 
-  private async extractBinanceError(response: Response) {
+  private async extractBinanceError(response: Response, symbol?: string) {
     try {
       const data = (await response.json()) as BinanceErrorPayload
       if (data?.code === -2015 || data?.code === -2014) {
         return 'Invalid API key, IP restriction, or missing permissions.'
       }
       if (data?.code === -2010) {
+        if (data?.msg?.includes('Filter failure:')) {
+          const filter = this.parseFilterFailure(data.msg)
+          if (filter) {
+            return new BinanceFilterException({
+              code: 'BINANCE_FILTER_FAILURE',
+              filter,
+              symbol: symbol ?? 'UNKNOWN',
+              message: `Filter failure: ${filter}`,
+              details: {},
+            })
+          }
+        }
         return 'Insufficient balance for this order. Check available funds or use quoteOrderQty for MARKET BUY.'
       }
       if (data?.msg) {
@@ -292,5 +570,19 @@ export class BinanceSpotClientService {
     return message
       .replace(/(signature|apiKey|secret)=([^&\s]+)/gi, '$1=[redacted]')
       .slice(0, 500)
+  }
+
+  private parseFilterFailure(message: string) {
+    const match = message.match(/Filter failure:\s*([A-Z_]+)/i)
+    if (!match) return null
+    const filter = match[1]?.toUpperCase()
+    if (
+      filter === 'NOTIONAL' ||
+      filter === 'LOT_SIZE' ||
+      filter === 'PRICE_FILTER'
+    ) {
+      return filter as 'NOTIONAL' | 'LOT_SIZE' | 'PRICE_FILTER'
+    }
+    return null
   }
 }
