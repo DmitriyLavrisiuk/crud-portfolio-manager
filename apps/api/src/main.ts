@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
-import * as cookieParser from 'cookie-parser'
+import cookieParser from 'cookie-parser'
 
 import { AppModule } from './app.module'
 
@@ -12,7 +12,7 @@ async function bootstrap() {
   app.use(cookieParser())
   app.enableCors({
     origin: 'http://localhost:5173',
-    credentials: true
+    credentials: true,
   })
 
   const port = Number(configService.get('PORT') ?? 4000)
@@ -28,7 +28,7 @@ function validateEnv(configService: ConfigService) {
     'JWT_REFRESH_SECRET',
     'JWT_ACCESS_TTL',
     'JWT_REFRESH_TTL',
-    'COOKIE_SECURE'
+    'COOKIE_SECURE',
   ]
 
   const missing = required.filter((key) => !configService.get(key))
@@ -38,6 +38,6 @@ function validateEnv(configService: ConfigService) {
 
   const cookieSecure = configService.get('COOKIE_SECURE')
   if (cookieSecure !== 'true' && cookieSecure !== 'false') {
-    throw new Error('COOKIE_SECURE must be \"true\" or \"false\"')
+    throw new Error('COOKIE_SECURE must be "true" or "false"')
   }
 }

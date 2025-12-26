@@ -20,11 +20,12 @@ export class UsersService {
     try {
       const created = new this.userModel({
         email: params.email.toLowerCase(),
-        passwordHash: params.passwordHash
+        passwordHash: params.passwordHash,
       })
       return await created.save()
-    } catch (error: any) {
-      if (error?.code === 11000) {
+    } catch (error: unknown) {
+      const maybeError = error as { code?: number }
+      if (maybeError?.code === 11000) {
         throw new ConflictException('Email already registered')
       }
       throw error
