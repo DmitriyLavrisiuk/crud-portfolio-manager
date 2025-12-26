@@ -31,3 +31,12 @@ export type DealsListResponse = {
   limit: number
   total: number
 }
+
+export type DealsStatsResponse = {
+  totalPnL: string
+  tradesCount: number
+  winRate: number
+  avgPnL: string
+  feesTotal: string
+  openCount: number
+}

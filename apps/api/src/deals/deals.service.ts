@@ -6,6 +6,7 @@ import { Model, type FilterQuery } from 'mongoose'
 import {
   type CloseDealDto,
   type CreateDealDto,
+  type DealsStatsQuery,
   type ListDealsQuery,
   type UpdateDealDto,
 } from './dto/deals.schemas'
@@ -76,6 +77,81 @@ export class DealsService {
     ])
 
     return { items, total, page, limit }
+  }
+
+  async getDealsStats(userId: string, query: DealsStatsQuery) {
+    const filter: FilterQuery<DealDocument> = { userId }
+
+    if (query.symbol) {
+      filter.symbol = query.symbol
+    }
+
+    if (query.from || query.to) {
+      filter.openedAt = {}
+      if (query.from) {
+        filter.openedAt.$gte = query.from
+      }
+      if (query.to) {
+        filter.openedAt.$lte = query.to
+      }
+    }
+
+    const status = query.status ?? 'ALL'
+
+    const openCount =
+      status === 'CLOSED'
+        ? 0
+        : await this.dealModel.countDocuments({ ...filter, status: 'OPEN' })
+
+    if (status === 'OPEN') {
+      return {
+        totalPnL: '0',
+        tradesCount: 0,
+        winRate: 0,
+        avgPnL: '0',
+        feesTotal: '0',
+        openCount,
+      }
+    }
+
+    const closedDeals = await this.dealModel
+      .find(
+        { ...filter, status: 'CLOSED' },
+        { realizedPnl: 1, 'entry.fee': 1, 'exit.fee': 1 },
+      )
+      .lean()
+
+    let totalPnL = new Big(0)
+    let feesTotal = new Big(0)
+    let winCount = 0
+
+    for (const deal of closedDeals) {
+      const realized = this.toBig(String(deal.realizedPnl ?? '0'))
+      totalPnL = totalPnL.plus(realized)
+      if (realized.gt(0)) {
+        winCount += 1
+      }
+
+      const entryFee = this.toBig(String(deal.entry?.fee ?? '0'))
+      const exitFee = this.toBig(String(deal.exit?.fee ?? '0'))
+      feesTotal = feesTotal.plus(entryFee).plus(exitFee)
+    }
+
+    const tradesCount = closedDeals.length
+    const avgPnL = tradesCount > 0 ? totalPnL.div(tradesCount).toString() : '0'
+    const winRate =
+      tradesCount > 0
+        ? Number(new Big(winCount).div(tradesCount).times(100).toFixed(2))
+        : 0
+
+    return {
+      totalPnL: totalPnL.toString(),
+      tradesCount,
+      winRate,
+      avgPnL,
+      feesTotal: feesTotal.toString(),
+      openCount,
+    }
   }
 
   async findByIdForUser(userId: string, id: string) {

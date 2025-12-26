@@ -19,10 +19,12 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe'
 import {
   closeDealSchema,
   createDealSchema,
+  dealsStatsSchema,
   listDealsSchema,
   updateDealSchema,
   type CloseDealDto,
   type CreateDealDto,
+  type DealsStatsQuery,
   type ListDealsQuery,
   type UpdateDealDto,
 } from './dto/deals.schemas'
@@ -60,6 +62,16 @@ export class DealsController {
       limit: result.limit,
       total: result.total,
     }
+  }
+
+  @Get('stats')
+  async getDealsStats(
+    @Req() req: Request,
+    @Query(new ZodValidationPipe(dealsStatsSchema))
+    query: DealsStatsQuery,
+  ) {
+    const user = req.user as { id: string }
+    return this.dealsService.getDealsStats(user.id, query)
   }
 
   @Get(':id')

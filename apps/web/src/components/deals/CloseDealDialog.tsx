@@ -80,6 +80,7 @@ export default function CloseDealDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deals'] })
+      queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
       onSuccess?.('Deal closed')
     },

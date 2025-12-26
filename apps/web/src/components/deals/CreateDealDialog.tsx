@@ -85,6 +85,7 @@ export default function CreateDealDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deals'] })
+      queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
       onSuccess?.('Deal created')
     },

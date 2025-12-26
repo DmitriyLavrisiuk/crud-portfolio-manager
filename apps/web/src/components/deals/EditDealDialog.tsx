@@ -103,6 +103,7 @@ export default function EditDealDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deals'] })
+      queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
       onSuccess?.('Deal updated')
     },

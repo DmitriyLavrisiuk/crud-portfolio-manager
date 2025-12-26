@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-table'
 
 import { useAuth } from '@/auth/AuthProvider'
-import { fetchDeals } from '@/api/dealsApi'
+import { fetchDeals, fetchDealsStats } from '@/api/dealsApi'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -112,6 +112,15 @@ export default function DealsPage() {
       }),
   })
 
+  const statsQuery = useQuery({
+    queryKey: ['dealsStats', queryFilters],
+    queryFn: () =>
+      fetchDealsStats(queryFilters, {
+        accessToken,
+        onUnauthorized: refresh,
+      }),
+  })
+
   const data = useMemo(() => dealsQuery.data?.items ?? [], [dealsQuery.data])
 
   const handleEdit = useCallback((deal: Deal) => {
@@ -124,6 +133,11 @@ export default function DealsPage() {
 
   const handleDelete = useCallback((deal: Deal) => {
     setDeleting(deal)
+  }, [])
+
+  const formatWinRate = useCallback((value?: number) => {
+    if (value === undefined || Number.isNaN(value)) return '0.00%'
+    return `${value.toFixed(2)}%`
   }, [])
 
   const columns = useMemo<ColumnDef<Deal>[]>(
@@ -197,6 +211,11 @@ export default function DealsPage() {
     [handleEdit, handleClose, handleDelete],
   )
 
+  const stats = statsQuery.data
+  const statsLoading = statsQuery.isLoading
+  const statsError =
+    statsQuery.error instanceof Error ? statsQuery.error.message : null
+
   const table = useReactTable({
     data,
     columns,
@@ -218,6 +237,54 @@ export default function DealsPage() {
 
   return (
     <section className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Stats</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Total PnL</p>
+              <p className="text-lg font-semibold">
+                {statsLoading ? 'Loading...' : (stats?.totalPnL ?? '0')}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Trades (CLOSED)</p>
+              <p className="text-lg font-semibold">
+                {statsLoading ? 'Loading...' : (stats?.tradesCount ?? 0)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Win rate</p>
+              <p className="text-lg font-semibold">
+                {statsLoading ? 'Loading...' : formatWinRate(stats?.winRate)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Avg PnL</p>
+              <p className="text-lg font-semibold">
+                {statsLoading ? 'Loading...' : (stats?.avgPnL ?? '0')}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Fees total</p>
+              <p className="text-lg font-semibold">
+                {statsLoading ? 'Loading...' : (stats?.feesTotal ?? '0')}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Open deals</p>
+              <p className="text-lg font-semibold">
+                {statsLoading ? 'Loading...' : (stats?.openCount ?? 0)}
+              </p>
+            </div>
+          </div>
+          {statsError && (
+            <p className="text-sm text-destructive">{statsError}</p>
+          )}
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>

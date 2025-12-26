@@ -77,7 +77,18 @@ export const listDealsSchema = z.object({
   ),
 })
 
+export const dealsStatsSchema = z.object({
+  from: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
+  to: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
+  status: z.preprocess(
+    emptyToUndefined,
+    z.enum(['OPEN', 'CLOSED', 'ALL']).optional(),
+  ),
+  symbol: z.preprocess(emptyToUndefined, uppercaseSymbolSchema.optional()),
+})
+
 export type CreateDealDto = z.infer<typeof createDealSchema>
 export type UpdateDealDto = z.infer<typeof updateDealSchema>
 export type CloseDealDto = z.infer<typeof closeDealSchema>
 export type ListDealsQuery = z.infer<typeof listDealsSchema>
+export type DealsStatsQuery = z.infer<typeof dealsStatsSchema>

@@ -2,6 +2,7 @@ import { apiFetch } from '@/lib/api'
 import {
   type Deal,
   type DealsListResponse,
+  type DealsStatsResponse,
   type DealStatus,
 } from '@/types/deals'
 
@@ -109,6 +110,17 @@ export async function closeDeal(
 export async function deleteDeal(id: string, auth: AuthOptions) {
   return apiFetch<{ ok: true }>(`/deals/${id}`, {
     method: 'DELETE',
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function fetchDealsStats(
+  filters: DealsListFilters,
+  auth: AuthOptions,
+) {
+  return apiFetch<DealsStatsResponse>(`/deals/stats${buildQuery(filters)}`, {
+    method: 'GET',
     accessToken: auth.accessToken,
     onUnauthorized: auth.onUnauthorized,
   })
