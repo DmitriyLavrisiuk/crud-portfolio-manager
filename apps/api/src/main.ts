@@ -29,6 +29,7 @@ function validateEnv(configService: ConfigService) {
     'JWT_ACCESS_TTL',
     'JWT_REFRESH_TTL',
     'COOKIE_SECURE',
+    'MASTER_KEY_HEX',
   ]
 
   const missing = required.filter((key) => !configService.get(key))
@@ -39,5 +40,10 @@ function validateEnv(configService: ConfigService) {
   const cookieSecure = configService.get('COOKIE_SECURE')
   if (cookieSecure !== 'true' && cookieSecure !== 'false') {
     throw new Error('COOKIE_SECURE must be "true" or "false"')
+  }
+
+  const masterKeyHex = configService.get('MASTER_KEY_HEX')
+  if (!/^[0-9a-fA-F]{64}$/.test(String(masterKeyHex))) {
+    throw new Error('MASTER_KEY_HEX must be a 64-character hex string')
   }
 }

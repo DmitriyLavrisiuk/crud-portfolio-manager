@@ -1,4 +1,4 @@
-# CRUD Portfolio Manager (v0.4.0)
+# CRUD Portfolio Manager (v0.5.0)
 
 Monorepo scaffold with a Vite + React web app and a NestJS API.
 
@@ -28,6 +28,8 @@ Copy example env files and adjust if needed:
 - `JWT_ACCESS_TTL` (e.g. `15m`)
 - `JWT_REFRESH_TTL` (e.g. `7d`)
 - `COOKIE_SECURE` (`true`/`false`)
+- `MASTER_KEY_HEX` (64 hex chars, AES-256-GCM key)
+- `BINANCE_SPOT_BASE_URL` (optional, default `https://api.binance.com`)
 
 ## Run database
 
@@ -72,6 +74,12 @@ pnpm dev
 - Update: `PATCH http://localhost:4000/transactions/:id`
 - Delete: `DELETE http://localhost:4000/transactions/:id`
 - UI: `http://localhost:5173/transactions`
+
+## Binance integration (v0.5.0)
+
+- Credentials: `GET/PUT/DELETE http://localhost:4000/binance/credentials`
+- Test: `POST http://localhost:4000/binance/credentials/test`
+- UI: `http://localhost:5173/settings`
 
 ## Troubleshooting
 
