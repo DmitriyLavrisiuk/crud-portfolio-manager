@@ -79,16 +79,46 @@ export const binanceSpotPlaceOrderSchema = z
           path: ['timeInForce'],
         })
       }
+      if (values.quoteOrderQty) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'quoteOrderQty is not allowed for LIMIT orders',
+          path: ['quoteOrderQty'],
+        })
+      }
     }
 
     if (values.type === 'MARKET') {
-      if (!values.quantity && !values.quoteOrderQty) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'quantity or quoteOrderQty is required for MARKET orders',
-          path: ['quantity'],
-        })
+      const hasQuantity = Boolean(values.quantity)
+      const hasQuote = Boolean(values.quoteOrderQty)
+
+      if (values.side === 'BUY') {
+        if (hasQuantity === hasQuote) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Provide either quantity or quoteOrderQty for MARKET BUY',
+            path: ['quantity'],
+          })
+        }
       }
+
+      if (values.side === 'SELL') {
+        if (!hasQuantity) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'quantity is required for MARKET SELL',
+            path: ['quantity'],
+          })
+        }
+        if (hasQuote) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'quoteOrderQty is not allowed for MARKET SELL',
+            path: ['quoteOrderQty'],
+          })
+        }
+      }
+
       if (values.price) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

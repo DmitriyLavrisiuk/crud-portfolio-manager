@@ -105,6 +105,7 @@ export async function placeSpotOrder(
     side: 'BUY' | 'SELL'
     type: 'MARKET' | 'LIMIT'
     quantity?: string
+    quoteOrderQty?: string
     price?: string
     timeInForce?: 'GTC'
   },

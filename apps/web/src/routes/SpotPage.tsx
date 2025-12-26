@@ -77,8 +77,10 @@ const spotOrderSchema = z
     side: z.enum(['BUY', 'SELL']),
     type: z.enum(['MARKET', 'LIMIT']),
     quantity: optionalDecimalSchema,
+    quoteOrderQty: optionalDecimalSchema,
     price: optionalDecimalSchema,
     timeInForce: z.literal('GTC').optional(),
+    marketBuyMode: z.enum(['QUOTE', 'BASE']).optional(),
   })
   .superRefine((values, ctx) => {
     if (values.type === 'LIMIT') {
@@ -99,10 +101,40 @@ const spotOrderSchema = z
     }
 
     if (values.type === 'MARKET') {
-      if (!values.quantity) {
+      if (values.side === 'BUY') {
+        const mode = values.marketBuyMode ?? 'QUOTE'
+        const hasQuantity = Boolean(values.quantity)
+        const hasQuote = Boolean(values.quoteOrderQty)
+        if (mode === 'QUOTE' && !hasQuote) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Spend amount is required for MARKET BUY',
+            path: ['quoteOrderQty'],
+          })
+        }
+        if (mode === 'BASE' && !hasQuantity) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Quantity is required for MARKET BUY',
+            path: ['quantity'],
+          })
+        }
+        if (
+          (mode === 'QUOTE' && hasQuantity) ||
+          (mode === 'BASE' && hasQuote)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Use only one amount for MARKET BUY',
+            path: ['quantity'],
+          })
+        }
+      }
+
+      if (values.side === 'SELL' && !values.quantity) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'Quantity is required for MARKET orders',
+          message: 'Quantity is required for MARKET SELL',
           path: ['quantity'],
         })
       }
@@ -123,8 +155,10 @@ const defaultOrderValues: SpotOrderFormValues = {
   side: 'BUY',
   type: 'MARKET',
   quantity: '',
+  quoteOrderQty: '',
   price: '',
   timeInForce: 'GTC',
+  marketBuyMode: 'QUOTE',
 }
 
 const columns: ColumnDef<BinanceSpotOrder>[] = [
@@ -171,6 +205,8 @@ export default function SpotPage() {
   })
 
   const orderType = orderForm.watch('type')
+  const orderSide = orderForm.watch('side')
+  const marketBuyMode = orderForm.watch('marketBuyMode') ?? 'QUOTE'
   const symbolField = orderForm.register('symbol')
 
   const placeOrderMutation = useMutation({
@@ -180,7 +216,18 @@ export default function SpotPage() {
           symbol: values.symbol.trim().toUpperCase(),
           side: values.side,
           type: values.type,
-          quantity: values.quantity?.trim() || undefined,
+          quantity:
+            values.type === 'MARKET' && values.side === 'BUY'
+              ? values.marketBuyMode === 'BASE'
+                ? values.quantity?.trim() || undefined
+                : undefined
+              : values.quantity?.trim() || undefined,
+          quoteOrderQty:
+            values.type === 'MARKET' && values.side === 'BUY'
+              ? values.marketBuyMode === 'QUOTE'
+                ? values.quoteOrderQty?.trim() || undefined
+                : undefined
+              : undefined,
           price: values.type === 'LIMIT' ? values.price?.trim() : undefined,
           timeInForce: values.type === 'LIMIT' ? 'GTC' : undefined,
         },
@@ -366,19 +413,83 @@ export default function SpotPage() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="spot-quantity">Quantity</Label>
-              <Input
-                id="spot-quantity"
-                {...orderForm.register('quantity')}
-                placeholder="0.01"
-              />
-              {orderForm.formState.errors.quantity ? (
-                <p className="text-xs text-destructive">
-                  {orderForm.formState.errors.quantity.message}
-                </p>
-              ) : null}
-            </div>
+            {orderType === 'MARKET' && orderSide === 'BUY' ? (
+              <div className="space-y-3 md:col-span-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <Label>Market buy mode</Label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      value="QUOTE"
+                      {...orderForm.register('marketBuyMode')}
+                      checked={marketBuyMode === 'QUOTE'}
+                      onChange={() => {
+                        orderForm.setValue('marketBuyMode', 'QUOTE')
+                        orderForm.setValue('quantity', '')
+                      }}
+                    />
+                    Spend (quote)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      value="BASE"
+                      {...orderForm.register('marketBuyMode')}
+                      checked={marketBuyMode === 'BASE'}
+                      onChange={() => {
+                        orderForm.setValue('marketBuyMode', 'BASE')
+                        orderForm.setValue('quoteOrderQty', '')
+                      }}
+                    />
+                    Buy amount (base)
+                  </label>
+                </div>
+
+                {marketBuyMode === 'QUOTE' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="spot-quote-qty">Spend (quote)</Label>
+                    <Input
+                      id="spot-quote-qty"
+                      {...orderForm.register('quoteOrderQty')}
+                      placeholder="100"
+                    />
+                    {orderForm.formState.errors.quoteOrderQty ? (
+                      <p className="text-xs text-destructive">
+                        {orderForm.formState.errors.quoteOrderQty.message}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="spot-quantity">Quantity</Label>
+                    <Input
+                      id="spot-quantity"
+                      {...orderForm.register('quantity')}
+                      placeholder="0.01"
+                    />
+                    {orderForm.formState.errors.quantity ? (
+                      <p className="text-xs text-destructive">
+                        {orderForm.formState.errors.quantity.message}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="spot-quantity">Quantity</Label>
+                <Input
+                  id="spot-quantity"
+                  {...orderForm.register('quantity')}
+                  placeholder="0.01"
+                />
+                {orderForm.formState.errors.quantity ? (
+                  <p className="text-xs text-destructive">
+                    {orderForm.formState.errors.quantity.message}
+                  </p>
+                ) : null}
+              </div>
+            )}
 
             {orderType === 'LIMIT' ? (
               <>

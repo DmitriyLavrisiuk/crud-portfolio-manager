@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { randomUUID, createHmac } from 'node:crypto'
+import Big from 'big.js'
 
 import { BinanceService } from './binance.service'
 
@@ -49,6 +50,41 @@ export class BinanceSpotClientService {
     }
   }
 
+  async getTickerPrice(symbol: string) {
+    const response = await fetch(
+      `${this.getBaseUrl()}/api/v3/ticker/price?symbol=${encodeURIComponent(
+        symbol,
+      )}`,
+    )
+    if (!response.ok) {
+      throw new Error('Failed to fetch Binance ticker price.')
+    }
+    const data = (await response.json()) as { price?: string }
+    if (!data?.price) {
+      throw new Error('Binance ticker price unavailable.')
+    }
+    return data.price
+  }
+
+  async getExchangeInfo(symbol: string) {
+    const response = await fetch(
+      `${this.getBaseUrl()}/api/v3/exchangeInfo?symbol=${encodeURIComponent(
+        symbol,
+      )}`,
+    )
+    if (!response.ok) {
+      throw new Error('Failed to fetch Binance exchange info.')
+    }
+    const data = (await response.json()) as {
+      symbols?: Array<{ baseAsset?: string; quoteAsset?: string }>
+    }
+    const info = data.symbols?.[0]
+    if (!info?.baseAsset || !info?.quoteAsset) {
+      throw new Error('Binance exchange info unavailable.')
+    }
+    return { baseAsset: info.baseAsset, quoteAsset: info.quoteAsset }
+  }
+
   async placeOrder(
     userId: string,
     payload: {
@@ -62,6 +98,7 @@ export class BinanceSpotClientService {
     },
   ) {
     const credentials = await this.getCredentials(userId)
+    await this.preflightCheck(payload, credentials)
     const params: SignedRequestParams = {
       symbol: payload.symbol,
       side: payload.side,
@@ -150,6 +187,81 @@ export class BinanceSpotClientService {
     return (await response.json()) as T
   }
 
+  private async preflightCheck(
+    payload: {
+      symbol: string
+      side: 'BUY' | 'SELL'
+      type: 'MARKET' | 'LIMIT'
+      quantity?: string
+      quoteOrderQty?: string
+      price?: string
+    },
+    credentials: { apiKey: string; apiSecret: string },
+  ) {
+    const { baseAsset, quoteAsset } = await this.getExchangeInfo(payload.symbol)
+    const balances = await this.getAccountBalances(credentials)
+    const freeBase = balances.get(baseAsset) ?? new Big(0)
+    const freeQuote = balances.get(quoteAsset) ?? new Big(0)
+
+    if (payload.side === 'BUY') {
+      if (payload.quoteOrderQty) {
+        const required = new Big(payload.quoteOrderQty)
+        if (freeQuote.lt(required)) {
+          throw new Error(
+            `Insufficient ${quoteAsset} balance: need ${required.toString()} ${quoteAsset}, available ${freeQuote.toString()} (free). Try smaller size.`,
+          )
+        }
+        return
+      }
+
+      if (payload.quantity) {
+        const isLimit = payload.type === 'LIMIT' && Boolean(payload.price)
+        const price = isLimit
+          ? (payload.price as string)
+          : await this.getTickerPrice(payload.symbol)
+        const baseCost = new Big(payload.quantity).times(price)
+        const required = isLimit ? baseCost : baseCost.times('1.002')
+        if (freeQuote.lt(required)) {
+          const hint = isLimit
+            ? 'Try smaller size.'
+            : 'Try smaller size or use quoteOrderQty for MARKET BUY.'
+          throw new Error(
+            `Insufficient ${quoteAsset} balance: need ~${required.toString()} ${quoteAsset}, available ${freeQuote.toString()} (free). ${hint}`,
+          )
+        }
+      }
+      return
+    }
+
+    if (payload.side === 'SELL' && payload.quantity) {
+      const required = new Big(payload.quantity)
+      if (freeBase.lt(required)) {
+        throw new Error(
+          `Insufficient ${baseAsset} balance: need ${required.toString()} ${baseAsset}, available ${freeBase.toString()} (free).`,
+        )
+      }
+    }
+  }
+
+  private async getAccountBalances(credentials: {
+    apiKey: string
+    apiSecret: string
+  }) {
+    const data = await this.signedRequest<{
+      balances?: Array<{ asset: string; free: string }>
+    }>('GET', '/api/v3/account', credentials)
+    const map = new Map<string, Big>()
+    for (const balance of data.balances ?? []) {
+      if (!balance.asset || balance.free === undefined) continue
+      try {
+        map.set(balance.asset, new Big(balance.free))
+      } catch {
+        // ignore invalid numbers
+      }
+    }
+    return map
+  }
+
   private getBaseUrl() {
     return (
       this.configService.get<string>('BINANCE_SPOT_BASE_URL') ??
@@ -162,6 +274,9 @@ export class BinanceSpotClientService {
       const data = (await response.json()) as BinanceErrorPayload
       if (data?.code === -2015 || data?.code === -2014) {
         return 'Invalid API key, IP restriction, or missing permissions.'
+      }
+      if (data?.code === -2010) {
+        return 'Insufficient balance for this order. Check available funds or use quoteOrderQty for MARKET BUY.'
       }
       if (data?.msg) {
         return this.sanitizeMessage(data.msg)
