@@ -9,6 +9,12 @@ export type DealLeg = {
   feeAsset?: string
 }
 
+export type DealExitLeg = DealLeg & {
+  closedAt: string
+  source?: 'MANUAL' | 'BINANCE'
+  orderId?: number
+}
+
 export type TradeFill = {
   id: number
   orderId: number
@@ -47,6 +53,9 @@ export type Deal = {
   closedAt?: string
   entry: DealLeg
   exit?: DealLeg
+  exitLegs?: DealExitLeg[]
+  closedQty?: string
+  remainingQty?: string
   realizedPnl?: string
   note?: string
   createdAt?: string

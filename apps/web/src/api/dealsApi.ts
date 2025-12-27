@@ -37,6 +37,12 @@ export type CloseDealPayload = {
   exit: DealExitPayload
 }
 
+export type PartialCloseDealPayload = {
+  closedAt?: string
+  exit: DealExitPayload
+  note?: string
+}
+
 export type ImportTradesPayload = {
   phase: 'ENTRY' | 'EXIT'
   orderId: number
@@ -124,6 +130,19 @@ export async function closeDeal(
   auth: AuthOptions,
 ) {
   return apiFetch<Deal>(`/deals/${id}/close`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function partialCloseDeal(
+  id: string,
+  payload: PartialCloseDealPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<Deal>(`/deals/${id}/partial-close`, {
     method: 'POST',
     body: JSON.stringify(payload),
     accessToken: auth.accessToken,

@@ -31,6 +31,7 @@ import { type Deal, type DealStatus } from '@/types/deals'
 import CreateDealDialog from '@/components/deals/CreateDealDialog'
 import EditDealDialog from '@/components/deals/EditDealDialog'
 import CloseDealDialog from '@/components/deals/CloseDealDialog'
+import PartialCloseDealDialog from '@/components/deals/PartialCloseDealDialog'
 import DeleteDealDialog from '@/components/deals/DeleteDealDialog'
 import ImportTradesDialog from '@/components/deals/ImportTradesDialog'
 import OpenWithOrderDialog from '@/components/deals/OpenWithOrderDialog'
@@ -76,6 +77,7 @@ export default function DealsPage() {
   const [openWithOrderOpen, setOpenWithOrderOpen] = useState(false)
   const [editing, setEditing] = useState<Deal | null>(null)
   const [closing, setClosing] = useState<Deal | null>(null)
+  const [partialClosing, setPartialClosing] = useState<Deal | null>(null)
   const [closingWithOrder, setClosingWithOrder] = useState<Deal | null>(null)
   const [deleting, setDeleting] = useState<Deal | null>(null)
   const [importing, setImporting] = useState<{
@@ -140,6 +142,10 @@ export default function DealsPage() {
     setClosing(deal)
   }, [])
 
+  const handlePartialClose = useCallback((deal: Deal) => {
+    setPartialClosing(deal)
+  }, [])
+
   const handleCloseWithOrder = useCallback((deal: Deal) => {
     setClosingWithOrder(deal)
   }, [])
@@ -188,6 +194,16 @@ export default function DealsPage() {
         cell: ({ row }) => row.original.entry?.quote ?? '-',
       },
       {
+        accessorKey: 'closedQty',
+        header: 'Closed Qty',
+        cell: ({ row }) => row.original.closedQty ?? '-',
+      },
+      {
+        accessorKey: 'remainingQty',
+        header: 'Remaining Qty',
+        cell: ({ row }) => row.original.remainingQty ?? '-',
+      },
+      {
         id: 'exitQuote',
         header: 'Exit Quote',
         cell: ({ row }) => row.original.exit?.quote ?? '-',
@@ -231,6 +247,13 @@ export default function DealsPage() {
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => handlePartialClose(row.original)}
+                >
+                  Partial close
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => handleCloseWithOrder(row.original)}
                 >
                   Close with order
@@ -248,7 +271,14 @@ export default function DealsPage() {
         ),
       },
     ],
-    [handleEdit, handleClose, handleCloseWithOrder, handleDelete, handleImport],
+    [
+      handleEdit,
+      handleClose,
+      handlePartialClose,
+      handleCloseWithOrder,
+      handleDelete,
+      handleImport,
+    ],
   )
 
   const stats = statsQuery.data
@@ -482,6 +512,12 @@ export default function DealsPage() {
         deal={closing}
         open={Boolean(closing)}
         onOpenChange={(open) => (!open ? setClosing(null) : null)}
+        onSuccess={showNotice}
+      />
+      <PartialCloseDealDialog
+        deal={partialClosing}
+        open={Boolean(partialClosing)}
+        onOpenChange={(open) => (!open ? setPartialClosing(null) : null)}
         onSuccess={showNotice}
       />
       {closingWithOrder && (

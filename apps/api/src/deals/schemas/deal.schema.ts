@@ -4,6 +4,7 @@ import { type HydratedDocument, Types } from 'mongoose'
 export type DealDocument = HydratedDocument<Deal>
 export type DealDirection = 'LONG' | 'SHORT'
 export type DealStatus = 'OPEN' | 'CLOSED'
+export type ExitLegSource = 'MANUAL' | 'BINANCE'
 
 @Schema({ _id: false })
 export class TradeFill {
@@ -60,6 +61,35 @@ export class DealLeg {
 
 export const DealLegSchema = SchemaFactory.createForClass(DealLeg)
 
+@Schema({ _id: false })
+export class DealExitLeg {
+  @Prop({ required: true, trim: true })
+  qty!: string
+
+  @Prop({ required: true, trim: true })
+  price!: string
+
+  @Prop({ required: true, trim: true })
+  quote!: string
+
+  @Prop({ trim: true })
+  fee?: string
+
+  @Prop({ trim: true })
+  feeAsset?: string
+
+  @Prop({ required: true })
+  closedAt!: Date
+
+  @Prop({ enum: ['MANUAL', 'BINANCE'] })
+  source?: ExitLegSource
+
+  @Prop()
+  orderId?: number
+}
+
+export const DealExitLegSchema = SchemaFactory.createForClass(DealExitLeg)
+
 @Schema({ timestamps: true })
 export class Deal {
   @Prop({ type: Types.ObjectId, required: true, index: true })
@@ -86,11 +116,20 @@ export class Deal {
   @Prop({ type: DealLegSchema })
   exit?: DealLeg
 
+  @Prop({ type: [DealExitLegSchema] })
+  exitLegs?: DealExitLeg[]
+
   @Prop({ type: [TradeFillSchema] })
   entryTrades?: TradeFill[]
 
   @Prop({ type: [TradeFillSchema] })
   exitTrades?: TradeFill[]
+
+  @Prop({ trim: true })
+  closedQty?: string
+
+  @Prop({ trim: true })
+  remainingQty?: string
 
   @Prop({ trim: true })
   realizedPnl?: string

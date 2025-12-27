@@ -24,6 +24,7 @@ import {
   importTradesSchema,
   listDealsSchema,
   openDealWithOrderSchema,
+  partialCloseDealSchema,
   updateDealSchema,
   type CloseDealDto,
   type CloseDealWithOrderDto,
@@ -32,6 +33,7 @@ import {
   type ImportTradesDto,
   type ListDealsQuery,
   type OpenDealWithOrderDto,
+  type PartialCloseDealDto,
   type UpdateDealDto,
 } from './dto/deals.schemas'
 import type { Deal } from './schemas/deal.schema'
@@ -121,6 +123,26 @@ export class DealsController {
     }
 
     return this.mapDeal(closed)
+  }
+
+  @Post(':id/partial-close')
+  async partialCloseDeal(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(partialCloseDealSchema))
+    body: PartialCloseDealDto,
+  ) {
+    const user = req.user as { id: string }
+    const updated = await this.dealsService.partialCloseDealForUser(
+      user.id,
+      id,
+      body,
+    )
+    if (!updated) {
+      throw new NotFoundException('Deal not found')
+    }
+
+    return this.mapDeal(updated)
   }
 
   @Post('open-with-order')
