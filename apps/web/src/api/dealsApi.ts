@@ -1,6 +1,7 @@
 import { apiFetch } from '@/lib/api'
 import {
   type Deal,
+  type DealWithOrderResponse,
   type DealsListResponse,
   type DealsStatsResponse,
   type DealStatus,
@@ -40,6 +41,22 @@ export type ImportTradesPayload = {
   phase: 'ENTRY' | 'EXIT'
   orderId: number
   symbol?: string
+}
+
+export type OpenDealWithOrderPayload = {
+  symbol: string
+  direction: 'LONG' | 'SHORT'
+  marketBuyMode?: 'QUOTE' | 'BASE'
+  quoteOrderQty?: string
+  quantity?: string
+  note?: string
+}
+
+export type CloseDealWithOrderPayload = {
+  marketBuyMode?: 'QUOTE' | 'BASE'
+  quoteOrderQty?: string
+  quantity?: string
+  note?: string
 }
 
 export type DealsListFilters = {
@@ -139,6 +156,31 @@ export async function importDealTrades(
   auth: AuthOptions,
 ) {
   return apiFetch<ImportTradesResponse>(`/deals/${dealId}/import-trades`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function openDealWithOrder(
+  payload: OpenDealWithOrderPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<DealWithOrderResponse>(`/deals/open-with-order`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function closeDealWithOrder(
+  dealId: string,
+  payload: CloseDealWithOrderPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<DealWithOrderResponse>(`/deals/${dealId}/close-with-order`, {
     method: 'POST',
     body: JSON.stringify(payload),
     accessToken: auth.accessToken,

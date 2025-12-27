@@ -53,6 +53,25 @@ export type Deal = {
   updatedAt?: string
 }
 
+export type BinanceOrderInfo = {
+  orderId: number
+  side: 'BUY' | 'SELL'
+  type: 'MARKET'
+}
+
+export type DealWithOrderResponse = {
+  deal: Deal
+  binance: BinanceOrderInfo
+  importedCount: number
+  aggregate: {
+    qty: string
+    price: string
+    quote: string
+    fee?: string
+    feeAsset?: string
+  }
+}
+
 export type DealsListResponse = {
   items: Deal[]
   page: number
