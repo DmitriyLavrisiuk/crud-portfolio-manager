@@ -286,6 +286,7 @@ export class BinanceSpotClientService {
     userId: string,
     payload: {
       symbol: string
+      orderId?: number
       startTime?: number
       endTime?: number
       fromId?: number

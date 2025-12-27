@@ -20,11 +20,13 @@ import {
   closeDealSchema,
   createDealSchema,
   dealsStatsSchema,
+  importTradesSchema,
   listDealsSchema,
   updateDealSchema,
   type CloseDealDto,
   type CreateDealDto,
   type DealsStatsQuery,
+  type ImportTradesDto,
   type ListDealsQuery,
   type UpdateDealDto,
 } from './dto/deals.schemas'
@@ -115,6 +117,26 @@ export class DealsController {
     }
 
     return this.mapDeal(closed)
+  }
+
+  @Post(':id/import-trades')
+  async importTrades(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(importTradesSchema))
+    body: ImportTradesDto,
+  ) {
+    const user = req.user as { id: string }
+    const result = await this.dealsService.importTradesForUser(
+      user.id,
+      id,
+      body,
+    )
+    if (!result) {
+      throw new NotFoundException('Deal not found')
+    }
+
+    return result
   }
 
   @Delete(':id')

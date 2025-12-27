@@ -3,24 +3,38 @@ import { InjectModel } from '@nestjs/mongoose'
 import Big from 'big.js'
 import { Model, type FilterQuery } from 'mongoose'
 
+import { BinanceSpotClientService } from '../binance/binance-spot-client.service'
 import {
   type CloseDealDto,
   type CreateDealDto,
   type DealsStatsQuery,
   type ListDealsQuery,
   type UpdateDealDto,
+  type ImportTradesDto,
 } from './dto/deals.schemas'
 import {
   Deal,
   type DealDirection,
   type DealDocument,
+  type DealLeg,
+  type TradeFill,
 } from './schemas/deal.schema'
+
+type TradesAggregate = {
+  qty: string
+  quote: string
+  price: string
+  feeInQuote?: string
+  quoteAsset?: string
+  feeByAsset: Record<string, string>
+}
 
 @Injectable()
 export class DealsService {
   constructor(
     @InjectModel(Deal.name)
     private dealModel: Model<DealDocument>,
+    private binanceSpotClient: BinanceSpotClientService,
   ) {}
 
   async createDeal(userId: string, data: CreateDealDto) {
@@ -247,12 +261,200 @@ export class DealsService {
     return deal.save()
   }
 
+  async importTradesForUser(
+    userId: string,
+    id: string,
+    payload: ImportTradesDto,
+  ) {
+    const deal = await this.dealModel.findOne({ _id: id, userId })
+    if (!deal) {
+      return null
+    }
+
+    const symbol = (payload.symbol || deal.symbol).trim().toUpperCase()
+    if (!symbol) {
+      throw new BadRequestException('Symbol is required')
+    }
+
+    if (payload.startTime && payload.endTime) {
+      const maxWindow = 24 * 60 * 60 * 1000
+      if (payload.endTime - payload.startTime > maxWindow) {
+        throw new BadRequestException('Time window must be within 24 hours')
+      }
+    }
+
+    const trades = await this.binanceSpotClient.getMyTrades(userId, {
+      symbol,
+      orderId: payload.orderId,
+      startTime: payload.startTime,
+      endTime: payload.endTime,
+      limit: payload.limit,
+    })
+
+    const normalized = trades.map((trade) => ({
+      id: trade.id,
+      orderId: trade.orderId,
+      price: trade.price,
+      qty: trade.qty,
+      quoteQty: trade.quoteQty,
+      commission: trade.commission,
+      commissionAsset: trade.commissionAsset,
+      time: trade.time,
+      isBuyer: trade.isBuyer,
+      isMaker: trade.isMaker,
+    }))
+
+    const phase = payload.phase
+    const existing =
+      phase === 'ENTRY' ? (deal.entryTrades ?? []) : (deal.exitTrades ?? [])
+    const { merged, importedCount } = this.mergeTrades(existing, normalized)
+    const aggregate = this.aggregateTrades(merged)
+
+    if (phase === 'ENTRY') {
+      this.applyAggregateToLeg(deal.entry, aggregate, deal)
+      deal.entryTrades = merged
+    } else {
+      if (!deal.exit) {
+        deal.exit = {
+          qty: aggregate.qty,
+          price: aggregate.price,
+          quote: aggregate.quote,
+        }
+      }
+      this.applyAggregateToLeg(deal.exit, aggregate, deal)
+      deal.exitTrades = merged
+    }
+
+    if (deal.status === 'CLOSED' && deal.exit) {
+      deal.realizedPnl = this.computePnl(
+        deal.direction,
+        deal.entry.quote,
+        deal.exit.quote,
+        deal.entry.fee,
+        deal.exit.fee,
+      )
+    }
+
+    await deal.save()
+
+    const leg = phase === 'ENTRY' ? deal.entry : deal.exit
+    return {
+      dealId: String(deal._id),
+      phase,
+      importedCount,
+      totalTradesInPhase: merged.length,
+      aggregate: {
+        qty: leg?.qty,
+        price: leg?.price,
+        quote: leg?.quote,
+        fee: leg?.fee,
+        feeAsset: leg?.feeAsset,
+      },
+      preview: merged.slice(0, 20),
+    }
+  }
+
   async deleteByIdForUser(userId: string, id: string) {
     return this.dealModel.findOneAndDelete({ _id: id, userId })
   }
 
   private computeQuote(qty: string, price: string) {
     return this.toBig(qty).times(this.toBig(price)).toString()
+  }
+
+  private mergeTrades(existing: TradeFill[], incoming: TradeFill[]) {
+    const merged = [...existing]
+    const seen = new Set(existing.map((trade) => trade.id))
+    let importedCount = 0
+
+    for (const trade of incoming) {
+      if (seen.has(trade.id)) {
+        continue
+      }
+      merged.push(trade)
+      seen.add(trade.id)
+      importedCount += 1
+    }
+
+    merged.sort((left, right) => {
+      if (left.time !== right.time) {
+        return left.time - right.time
+      }
+      return left.id - right.id
+    })
+
+    return { merged, importedCount }
+  }
+
+  private aggregateTrades(trades: TradeFill[]): TradesAggregate {
+    let sumQty = this.toBig('0')
+    let sumQuote = this.toBig('0')
+    const feeByAsset = new Map<string, Big>()
+
+    for (const trade of trades) {
+      sumQty = sumQty.plus(this.toBig(trade.qty))
+      sumQuote = sumQuote.plus(this.toBig(trade.quoteQty))
+
+      const current = feeByAsset.get(trade.commissionAsset) ?? this.toBig('0')
+      feeByAsset.set(
+        trade.commissionAsset,
+        current.plus(this.toBig(trade.commission)),
+      )
+    }
+
+    const price = sumQty.gt(0) ? sumQuote.div(sumQty) : this.toBig('0')
+    const feeByAssetRecord: Record<string, string> = {}
+    for (const [asset, total] of feeByAsset.entries()) {
+      feeByAssetRecord[asset] = total.toString()
+    }
+
+    let feeInQuote: string | undefined
+    let quoteAsset: string | undefined
+    if (feeByAsset.size === 1) {
+      const [asset, total] = Array.from(feeByAsset.entries())[0]
+      feeInQuote = total.toString()
+      quoteAsset = asset
+    }
+
+    return {
+      qty: sumQty.toString(),
+      quote: sumQuote.toString(),
+      price: price.toString(),
+      feeInQuote,
+      quoteAsset,
+      feeByAsset: feeByAssetRecord,
+    }
+  }
+
+  private applyAggregateToLeg(
+    leg: DealLeg,
+    aggregate: TradesAggregate,
+    deal: DealDocument,
+  ) {
+    leg.qty = aggregate.qty
+    leg.price = aggregate.price
+    leg.quote = aggregate.quote
+
+    const feeAssets = Object.keys(aggregate.feeByAsset)
+    if (feeAssets.length === 1) {
+      const asset = feeAssets[0]
+      leg.fee = aggregate.feeByAsset[asset]
+      leg.feeAsset = asset
+      return
+    }
+
+    if (feeAssets.length > 1) {
+      this.appendNoteOnce(deal, 'Fee assets are mixed.')
+    }
+  }
+
+  private appendNoteOnce(deal: DealDocument, message: string) {
+    const current = deal.note?.trim()
+    if (current?.includes(message)) {
+      return
+    }
+    const next = current ? `${current} ${message}` : message
+    deal.note = next.length > 500 ? next.slice(0, 500) : next
   }
 
   private computePnl(

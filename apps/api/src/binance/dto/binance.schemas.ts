@@ -72,6 +72,7 @@ export const binanceSpotCancelReplaceSchema = z
 
 export const binanceSpotMyTradesSchema = z.object({
   symbol: symbolSchema,
+  orderId: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(1000).optional(),
   fromId: z.coerce.number().int().nonnegative().optional(),
   startTime: z.coerce.number().int().nonnegative().optional(),

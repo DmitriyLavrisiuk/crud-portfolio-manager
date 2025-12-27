@@ -87,8 +87,48 @@ export const dealsStatsSchema = z.object({
   symbol: z.preprocess(emptyToUndefined, uppercaseSymbolSchema.optional()),
 })
 
+export const importTradesSchema = z
+  .object({
+    phase: z.enum(['ENTRY', 'EXIT']),
+    symbol: uppercaseSymbolSchema.optional(),
+    orderId: z.coerce.number().int().positive(),
+    startTime: z.coerce.number().int().nonnegative().optional(),
+    endTime: z.coerce.number().int().nonnegative().optional(),
+    limit: z.coerce.number().int().min(1).max(1000).optional(),
+  })
+  .superRefine((values, ctx) => {
+    const hasStart = typeof values.startTime === 'number'
+    const hasEnd = typeof values.endTime === 'number'
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide both startTime and endTime',
+        path: ['startTime'],
+      })
+      return
+    }
+    if (hasStart && hasEnd) {
+      if (values.endTime < values.startTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'endTime must be >= startTime',
+          path: ['endTime'],
+        })
+      }
+      const maxWindow = 24 * 60 * 60 * 1000
+      if (values.endTime - values.startTime > maxWindow) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Time window must be within 24 hours',
+          path: ['endTime'],
+        })
+      }
+    }
+  })
+
 export type CreateDealDto = z.infer<typeof createDealSchema>
 export type UpdateDealDto = z.infer<typeof updateDealSchema>
 export type CloseDealDto = z.infer<typeof closeDealSchema>
 export type ListDealsQuery = z.infer<typeof listDealsSchema>
 export type DealsStatsQuery = z.infer<typeof dealsStatsSchema>
+export type ImportTradesDto = z.infer<typeof importTradesSchema>

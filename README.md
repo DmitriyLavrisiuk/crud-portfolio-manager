@@ -1,4 +1,4 @@
-# CRUD Portfolio Manager (v0.7.0)
+# CRUD Portfolio Manager (v0.7.1)
 
 Monorepo scaffold with a Vite + React web app and a NestJS API.
 
@@ -106,6 +106,7 @@ pnpm dev
 - Get by id: `GET http://localhost:4000/deals/:id`
 - Update: `PATCH http://localhost:4000/deals/:id`
 - Close: `POST http://localhost:4000/deals/:id/close`
+- Import trades: `POST http://localhost:4000/deals/:id/import-trades`
 - Delete: `DELETE http://localhost:4000/deals/:id`
 - Stats: `GET http://localhost:4000/deals/stats?from&to&symbol&status`
 - UI: `http://localhost:5173/deals`
@@ -125,6 +126,8 @@ pnpm dev
   - Deals module (manual deals): CRUD, close flow, realized PnL via Big.js, stats endpoint.
   - Deals UI: list with filters, create/edit/close/delete dialogs, stats card synced to filters.
   - Spot UI continues to support testnet operations via configured base URL.
+- v0.7.1
+  - Import Binance spot trades into a deal to auto-fill entry/exit legs.
 
 ## Troubleshooting
 
