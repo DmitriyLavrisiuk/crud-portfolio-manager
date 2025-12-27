@@ -102,10 +102,12 @@ pnpm dev
 ## Deals (v0.7.0)
 
 - Create: `POST http://localhost:4000/deals`
+- Open with order: `POST http://localhost:4000/deals/open-with-order`
 - List: `GET http://localhost:4000/deals?from&to&symbol&status`
 - Get by id: `GET http://localhost:4000/deals/:id`
 - Update: `PATCH http://localhost:4000/deals/:id`
 - Close: `POST http://localhost:4000/deals/:id/close`
+- Close with order: `POST http://localhost:4000/deals/:id/close-with-order`
 - Import trades: `POST http://localhost:4000/deals/:id/import-trades`
 - Delete: `DELETE http://localhost:4000/deals/:id`
 - Stats: `GET http://localhost:4000/deals/stats?from&to&symbol&status`
@@ -128,6 +130,8 @@ pnpm dev
   - Spot UI continues to support testnet operations via configured base URL.
 - v0.7.1
   - Import Binance spot trades into a deal to auto-fill entry/exit legs.
+- v0.7.1-3
+  - Open/close deals with Binance MARKET orders and auto-import fills.
 
 ## Troubleshooting
 

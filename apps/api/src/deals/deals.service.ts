@@ -1,13 +1,22 @@
-import { BadRequestException, Injectable } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import Big from 'big.js'
 import { Model, type FilterQuery } from 'mongoose'
 
-import { BinanceSpotClientService } from '../binance/binance-spot-client.service'
+import {
+  BinanceFilterException,
+  BinanceSpotClientService,
+} from '../binance/binance-spot-client.service'
 import {
   type CloseDealDto,
+  type CloseDealWithOrderDto,
   type CreateDealDto,
   type DealsStatsQuery,
+  type OpenDealWithOrderDto,
   type ListDealsQuery,
   type UpdateDealDto,
   type ImportTradesDto,
@@ -283,31 +292,249 @@ export class DealsService {
       }
     }
 
-    const trades = await this.binanceSpotClient.getMyTrades(userId, {
+    let trades: TradeFill[]
+    try {
+      trades = await this.binanceSpotClient.getMyTrades(userId, {
+        symbol,
+        orderId: payload.orderId,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        limit: payload.limit,
+      })
+    } catch (error) {
+      throw this.mapBinanceError(error)
+    }
+
+    const result = this.applyTradesToDeal(deal, payload.phase, trades)
+    await deal.save()
+
+    return {
+      dealId: String(deal._id),
+      phase: payload.phase,
+      importedCount: result.importedCount,
+      totalTradesInPhase: result.totalTrades,
+      aggregate: {
+        qty: result.leg.qty,
+        price: result.leg.price,
+        quote: result.leg.quote,
+        fee: result.leg.fee,
+        feeAsset: result.leg.feeAsset,
+      },
+      preview: result.preview,
+    }
+  }
+
+  async openDealWithOrder(userId: string, payload: OpenDealWithOrderDto) {
+    const symbol = payload.symbol.trim().toUpperCase()
+    const side = payload.direction === 'LONG' ? 'BUY' : 'SELL'
+    const orderPayload = this.buildMarketOrderPayload(
+      side,
+      payload.marketBuyMode,
+      payload.quantity,
+      payload.quoteOrderQty,
+    )
+
+    const order = await this.placeMarketOrder(
+      userId,
       symbol,
-      orderId: payload.orderId,
-      startTime: payload.startTime,
-      endTime: payload.endTime,
-      limit: payload.limit,
+      side,
+      orderPayload,
+    )
+    const trades = await this.fetchTradesByOrderId(
+      userId,
+      symbol,
+      order.orderId,
+    )
+
+    if (trades.length === 0) {
+      throw new ConflictException('Order has no fills yet')
+    }
+
+    const deal = new this.dealModel({
+      userId,
+      symbol,
+      direction: payload.direction,
+      status: 'OPEN',
+      openedAt: new Date(),
+      note: payload.note,
+      entry: {
+        qty: '0',
+        price: '0',
+        quote: '0',
+      },
     })
 
-    const normalized = trades.map((trade) => ({
-      id: trade.id,
-      orderId: trade.orderId,
-      price: trade.price,
-      qty: trade.qty,
-      quoteQty: trade.quoteQty,
-      commission: trade.commission,
-      commissionAsset: trade.commissionAsset,
-      time: trade.time,
-      isBuyer: trade.isBuyer,
-      isMaker: trade.isMaker,
-    }))
+    const applied = this.applyTradesToDeal(deal, 'ENTRY', trades)
+    await deal.save()
 
-    const phase = payload.phase
+    return {
+      deal: this.mapDeal(deal),
+      binance: { orderId: order.orderId, side, type: 'MARKET' as const },
+      importedCount: applied.importedCount,
+      aggregate: {
+        qty: applied.leg.qty,
+        price: applied.leg.price,
+        quote: applied.leg.quote,
+        fee: applied.leg.fee,
+        feeAsset: applied.leg.feeAsset,
+      },
+    }
+  }
+
+  async closeDealWithOrder(
+    userId: string,
+    id: string,
+    payload: CloseDealWithOrderDto,
+  ) {
+    const deal = await this.dealModel.findOne({ _id: id, userId })
+    if (!deal) {
+      return null
+    }
+
+    if (deal.status === 'CLOSED') {
+      throw new BadRequestException('Deal is already closed')
+    }
+
+    const symbol = deal.symbol.trim().toUpperCase()
+    const side = deal.direction === 'LONG' ? 'SELL' : 'BUY'
+    const orderPayload = this.buildMarketOrderPayload(
+      side,
+      payload.marketBuyMode,
+      payload.quantity ?? deal.entry?.qty,
+      payload.quoteOrderQty,
+    )
+
+    const order = await this.placeMarketOrder(
+      userId,
+      symbol,
+      side,
+      orderPayload,
+    )
+    const trades = await this.fetchTradesByOrderId(
+      userId,
+      symbol,
+      order.orderId,
+    )
+
+    if (trades.length === 0) {
+      throw new ConflictException('Order has no fills yet')
+    }
+
+    const applied = this.applyTradesToDeal(deal, 'EXIT', trades)
+    deal.status = 'CLOSED'
+    deal.closedAt = new Date()
+    if (payload.note) {
+      this.appendNote(deal, payload.note)
+    }
+    if (deal.exit) {
+      deal.realizedPnl = this.computePnl(
+        deal.direction,
+        deal.entry.quote,
+        deal.exit.quote,
+        deal.entry.fee,
+        deal.exit.fee,
+      )
+    }
+
+    await deal.save()
+
+    return {
+      deal: this.mapDeal(deal),
+      binance: { orderId: order.orderId, side, type: 'MARKET' as const },
+      importedCount: applied.importedCount,
+      aggregate: {
+        qty: applied.leg.qty,
+        price: applied.leg.price,
+        quote: applied.leg.quote,
+        fee: applied.leg.fee,
+        feeAsset: applied.leg.feeAsset,
+      },
+    }
+  }
+
+  async deleteByIdForUser(userId: string, id: string) {
+    return this.dealModel.findOneAndDelete({ _id: id, userId })
+  }
+
+  private computeQuote(qty: string, price: string) {
+    return this.toBig(qty).times(this.toBig(price)).toString()
+  }
+
+  private buildMarketOrderPayload(
+    side: 'BUY' | 'SELL',
+    marketBuyMode: 'QUOTE' | 'BASE' | undefined,
+    quantity: string | undefined,
+    quoteOrderQty: string | undefined,
+  ) {
+    if (side === 'BUY') {
+      if (marketBuyMode === 'QUOTE') {
+        if (!quoteOrderQty) {
+          throw new BadRequestException('quoteOrderQty is required')
+        }
+        return { quoteOrderQty }
+      }
+      if (!quantity) {
+        throw new BadRequestException('quantity is required')
+      }
+      return { quantity }
+    }
+
+    if (!quantity) {
+      throw new BadRequestException('quantity is required')
+    }
+    return { quantity }
+  }
+
+  private async placeMarketOrder(
+    userId: string,
+    symbol: string,
+    side: 'BUY' | 'SELL',
+    payload: { quantity?: string; quoteOrderQty?: string },
+  ) {
+    try {
+      const response = await this.binanceSpotClient.placeOrder(userId, {
+        symbol,
+        side,
+        type: 'MARKET',
+        quantity: payload.quantity,
+        quoteOrderQty: payload.quoteOrderQty,
+      })
+      const orderId = Number(
+        (response as { orderId?: number | string }).orderId,
+      )
+      if (!Number.isFinite(orderId)) {
+        throw new BadRequestException('Binance orderId missing in response')
+      }
+      return { orderId }
+    } catch (error) {
+      throw this.mapBinanceError(error)
+    }
+  }
+
+  private async fetchTradesByOrderId(
+    userId: string,
+    symbol: string,
+    orderId: number,
+  ) {
+    try {
+      return await this.binanceSpotClient.getMyTrades(userId, {
+        symbol,
+        orderId,
+        limit: 100,
+      })
+    } catch (error) {
+      throw this.mapBinanceError(error)
+    }
+  }
+
+  private applyTradesToDeal(
+    deal: DealDocument,
+    phase: 'ENTRY' | 'EXIT',
+    trades: TradeFill[],
+  ) {
     const existing =
       phase === 'ENTRY' ? (deal.entryTrades ?? []) : (deal.exitTrades ?? [])
-    const { merged, importedCount } = this.mergeTrades(existing, normalized)
+    const { merged, importedCount } = this.mergeTrades(existing, trades)
     const aggregate = this.aggregateTrades(merged)
 
     if (phase === 'ENTRY') {
@@ -335,31 +562,13 @@ export class DealsService {
       )
     }
 
-    await deal.save()
-
     const leg = phase === 'ENTRY' ? deal.entry : deal.exit
     return {
-      dealId: String(deal._id),
-      phase,
       importedCount,
-      totalTradesInPhase: merged.length,
-      aggregate: {
-        qty: leg?.qty,
-        price: leg?.price,
-        quote: leg?.quote,
-        fee: leg?.fee,
-        feeAsset: leg?.feeAsset,
-      },
+      totalTrades: merged.length,
+      leg,
       preview: merged.slice(0, 20),
     }
-  }
-
-  async deleteByIdForUser(userId: string, id: string) {
-    return this.dealModel.findOneAndDelete({ _id: id, userId })
-  }
-
-  private computeQuote(qty: string, price: string) {
-    return this.toBig(qty).times(this.toBig(price)).toString()
   }
 
   private mergeTrades(existing: TradeFill[], incoming: TradeFill[]) {
@@ -455,6 +664,43 @@ export class DealsService {
     }
     const next = current ? `${current} ${message}` : message
     deal.note = next.length > 500 ? next.slice(0, 500) : next
+  }
+
+  private appendNote(deal: DealDocument, message: string) {
+    const trimmed = message.trim()
+    if (!trimmed) return
+    const current = deal.note?.trim()
+    const next = current ? `${current} ${trimmed}` : trimmed
+    deal.note = next.length > 500 ? next.slice(0, 500) : next
+  }
+
+  private mapBinanceError(error: unknown) {
+    if (error instanceof BinanceFilterException) {
+      return new BadRequestException(error.message)
+    }
+    if (error instanceof Error) {
+      const message = error.message
+      if (message.toLowerCase().includes('insufficient')) {
+        return new BadRequestException(message)
+      }
+      return new BadRequestException(message)
+    }
+    return new BadRequestException('Binance request failed')
+  }
+
+  private mapDeal(deal: DealDocument) {
+    const obj =
+      typeof (deal as { toObject?: () => Deal }).toObject === 'function'
+        ? (deal as { toObject: () => Deal }).toObject()
+        : (deal as Deal)
+    const { _id, __v, userId, ...rest } = obj as Deal & {
+      _id: unknown
+      __v?: unknown
+      userId?: unknown
+    }
+    void __v
+    void userId
+    return { ...rest, id: String(_id) }
   }
 
   private computePnl(

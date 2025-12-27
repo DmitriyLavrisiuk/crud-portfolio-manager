@@ -87,6 +87,22 @@ export const dealsStatsSchema = z.object({
   symbol: z.preprocess(emptyToUndefined, uppercaseSymbolSchema.optional()),
 })
 
+export const openDealWithOrderSchema = z.object({
+  symbol: uppercaseSymbolSchema,
+  direction: z.enum(['LONG', 'SHORT']),
+  marketBuyMode: z.enum(['QUOTE', 'BASE']).optional(),
+  quoteOrderQty: positiveDecimalStringSchema.optional(),
+  quantity: positiveDecimalStringSchema.optional(),
+  note: z.string().trim().max(500).optional(),
+})
+
+export const closeDealWithOrderSchema = z.object({
+  marketBuyMode: z.enum(['QUOTE', 'BASE']).optional(),
+  quoteOrderQty: positiveDecimalStringSchema.optional(),
+  quantity: positiveDecimalStringSchema.optional(),
+  note: z.string().trim().max(500).optional(),
+})
+
 export const importTradesSchema = z
   .object({
     phase: z.enum(['ENTRY', 'EXIT']),
@@ -131,4 +147,6 @@ export type UpdateDealDto = z.infer<typeof updateDealSchema>
 export type CloseDealDto = z.infer<typeof closeDealSchema>
 export type ListDealsQuery = z.infer<typeof listDealsSchema>
 export type DealsStatsQuery = z.infer<typeof dealsStatsSchema>
+export type OpenDealWithOrderDto = z.infer<typeof openDealWithOrderSchema>
+export type CloseDealWithOrderDto = z.infer<typeof closeDealWithOrderSchema>
 export type ImportTradesDto = z.infer<typeof importTradesSchema>
