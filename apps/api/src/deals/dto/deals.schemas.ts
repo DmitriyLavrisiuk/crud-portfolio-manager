@@ -97,8 +97,8 @@ export const importTradesSchema = z
     limit: z.coerce.number().int().min(1).max(1000).optional(),
   })
   .superRefine((values, ctx) => {
-    const hasStart = typeof values.startTime === 'number'
-    const hasEnd = typeof values.endTime === 'number'
+    const hasStart = values.startTime !== undefined
+    const hasEnd = values.endTime !== undefined
     if (hasStart !== hasEnd) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -107,7 +107,7 @@ export const importTradesSchema = z
       })
       return
     }
-    if (hasStart && hasEnd) {
+    if (values.startTime !== undefined && values.endTime !== undefined) {
       if (values.endTime < values.startTime) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
