@@ -70,6 +70,101 @@ export const closeDealSchema = z.object({
   exit: exitSchema,
 })
 
+export const openWithOrderSchema = z
+  .object({
+    symbol: symbolSchema,
+    direction: z.enum(['LONG', 'SHORT']),
+    marketBuyMode: z.enum(['QUOTE', 'BASE']).optional(),
+    quoteOrderQty: z.preprocess(
+      emptyToUndefined,
+      positiveDecimalStringSchema.optional(),
+    ),
+    quantity: z.preprocess(
+      emptyToUndefined,
+      positiveDecimalStringSchema.optional(),
+    ),
+    note: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
+  })
+  .superRefine((values, ctx) => {
+    const isBuy = values.direction === 'LONG'
+    if (isBuy) {
+      if (values.marketBuyMode === 'QUOTE') {
+        if (!values.quoteOrderQty) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Quote amount is required',
+            path: ['quoteOrderQty'],
+          })
+        }
+        return
+      }
+      if (!values.quantity) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Quantity is required',
+          path: ['quantity'],
+        })
+      }
+      return
+    }
+
+    if (!values.quantity) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Quantity is required',
+        path: ['quantity'],
+      })
+    }
+  })
+
+export const closeWithOrderSchema = z
+  .object({
+    closeSide: z.enum(['BUY', 'SELL']),
+    marketBuyMode: z.enum(['QUOTE', 'BASE']).optional(),
+    quoteOrderQty: z.preprocess(
+      emptyToUndefined,
+      positiveDecimalStringSchema.optional(),
+    ),
+    quantity: z.preprocess(
+      emptyToUndefined,
+      positiveDecimalStringSchema.optional(),
+    ),
+    note: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
+  })
+  .superRefine((values, ctx) => {
+    if (values.closeSide === 'SELL') {
+      if (!values.quantity) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Quantity is required',
+          path: ['quantity'],
+        })
+      }
+      return
+    }
+
+    if (values.marketBuyMode === 'QUOTE') {
+      if (!values.quoteOrderQty) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Quote amount is required',
+          path: ['quoteOrderQty'],
+        })
+      }
+      return
+    }
+
+    if (!values.quantity) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Quantity is required',
+        path: ['quantity'],
+      })
+    }
+  })
+
 export type CreateDealFormValues = z.infer<typeof createDealSchema>
 export type EditDealFormValues = z.infer<typeof editDealSchema>
 export type CloseDealFormValues = z.infer<typeof closeDealSchema>
+export type OpenWithOrderFormValues = z.infer<typeof openWithOrderSchema>
+export type CloseWithOrderFormValues = z.infer<typeof closeWithOrderSchema>

@@ -18,14 +18,20 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { ZodValidationPipe } from '../common/zod-validation.pipe'
 import {
   closeDealSchema,
+  closeDealWithOrderSchema,
   createDealSchema,
   dealsStatsSchema,
+  importTradesSchema,
   listDealsSchema,
+  openDealWithOrderSchema,
   updateDealSchema,
   type CloseDealDto,
+  type CloseDealWithOrderDto,
   type CreateDealDto,
   type DealsStatsQuery,
+  type ImportTradesDto,
   type ListDealsQuery,
+  type OpenDealWithOrderDto,
   type UpdateDealDto,
 } from './dto/deals.schemas'
 import type { Deal } from './schemas/deal.schema'
@@ -115,6 +121,51 @@ export class DealsController {
     }
 
     return this.mapDeal(closed)
+  }
+
+  @Post('open-with-order')
+  async openWithOrder(
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(openDealWithOrderSchema))
+    body: OpenDealWithOrderDto,
+  ) {
+    const user = req.user as { id: string }
+    return this.dealsService.openDealWithOrder(user.id, body)
+  }
+
+  @Post(':id/close-with-order')
+  async closeWithOrder(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(closeDealWithOrderSchema))
+    body: CloseDealWithOrderDto,
+  ) {
+    const user = req.user as { id: string }
+    const result = await this.dealsService.closeDealWithOrder(user.id, id, body)
+    if (!result) {
+      throw new NotFoundException('Deal not found')
+    }
+    return result
+  }
+
+  @Post(':id/import-trades')
+  async importTrades(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(importTradesSchema))
+    body: ImportTradesDto,
+  ) {
+    const user = req.user as { id: string }
+    const result = await this.dealsService.importTradesForUser(
+      user.id,
+      id,
+      body,
+    )
+    if (!result) {
+      throw new NotFoundException('Deal not found')
+    }
+
+    return result
   }
 
   @Delete(':id')

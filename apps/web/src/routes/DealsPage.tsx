@@ -32,6 +32,9 @@ import CreateDealDialog from '@/components/deals/CreateDealDialog'
 import EditDealDialog from '@/components/deals/EditDealDialog'
 import CloseDealDialog from '@/components/deals/CloseDealDialog'
 import DeleteDealDialog from '@/components/deals/DeleteDealDialog'
+import ImportTradesDialog from '@/components/deals/ImportTradesDialog'
+import OpenWithOrderDialog from '@/components/deals/OpenWithOrderDialog'
+import CloseWithOrderDialog from '@/components/deals/CloseWithOrderDialog'
 
 type FiltersState = {
   from: string
@@ -70,9 +73,15 @@ export default function DealsPage() {
   const [appliedFilters, setAppliedFilters] =
     useState<FiltersState>(getDefaultFilters())
   const [createOpen, setCreateOpen] = useState(false)
+  const [openWithOrderOpen, setOpenWithOrderOpen] = useState(false)
   const [editing, setEditing] = useState<Deal | null>(null)
   const [closing, setClosing] = useState<Deal | null>(null)
+  const [closingWithOrder, setClosingWithOrder] = useState<Deal | null>(null)
   const [deleting, setDeleting] = useState<Deal | null>(null)
+  const [importing, setImporting] = useState<{
+    deal: Deal
+    phase: 'ENTRY' | 'EXIT'
+  } | null>(null)
 
   useEffect(() => {
     return () => {
@@ -131,8 +140,16 @@ export default function DealsPage() {
     setClosing(deal)
   }, [])
 
+  const handleCloseWithOrder = useCallback((deal: Deal) => {
+    setClosingWithOrder(deal)
+  }, [])
+
   const handleDelete = useCallback((deal: Deal) => {
     setDeleting(deal)
+  }, [])
+
+  const handleImport = useCallback((deal: Deal, phase: 'ENTRY' | 'EXIT') => {
+    setImporting({ deal, phase })
   }, [])
 
   const formatWinRate = useCallback((value?: number) => {
@@ -187,15 +204,38 @@ export default function DealsPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => handleImport(row.original, 'ENTRY')}
+            >
+              Import entry
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleImport(row.original, 'EXIT')}
+            >
+              Import exit
+            </Button>
+            <Button
+              size="sm"
               variant="secondary"
               onClick={() => handleEdit(row.original)}
             >
               Edit
             </Button>
             {row.original.status === 'OPEN' && (
-              <Button size="sm" onClick={() => handleClose(row.original)}>
-                Close
-              </Button>
+              <>
+                <Button size="sm" onClick={() => handleClose(row.original)}>
+                  Close
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleCloseWithOrder(row.original)}
+                >
+                  Close with order
+                </Button>
+              </>
             )}
             <Button
               size="sm"
@@ -208,7 +248,7 @@ export default function DealsPage() {
         ),
       },
     ],
-    [handleEdit, handleClose, handleDelete],
+    [handleEdit, handleClose, handleCloseWithOrder, handleDelete, handleImport],
   )
 
   const stats = statsQuery.data
@@ -352,6 +392,12 @@ export default function DealsPage() {
                 Reset
               </Button>
               <Button onClick={() => setCreateOpen(true)}>Create deal</Button>
+              <Button
+                variant="outline"
+                onClick={() => setOpenWithOrderOpen(true)}
+              >
+                Open with order
+              </Button>
             </div>
           </div>
 
@@ -420,6 +466,12 @@ export default function DealsPage() {
         onOpenChange={setCreateOpen}
         onSuccess={showNotice}
       />
+      <OpenWithOrderDialog
+        open={openWithOrderOpen}
+        onOpenChange={setOpenWithOrderOpen}
+        onSuccess={showNotice}
+        queryFilters={queryFilters}
+      />
       <EditDealDialog
         deal={editing}
         open={Boolean(editing)}
@@ -432,12 +484,30 @@ export default function DealsPage() {
         onOpenChange={(open) => (!open ? setClosing(null) : null)}
         onSuccess={showNotice}
       />
+      {closingWithOrder && (
+        <CloseWithOrderDialog
+          deal={closingWithOrder}
+          open={Boolean(closingWithOrder)}
+          onOpenChange={(open) => (!open ? setClosingWithOrder(null) : null)}
+          onSuccess={showNotice}
+          queryFilters={queryFilters}
+        />
+      )}
       <DeleteDealDialog
         deal={deleting}
         open={Boolean(deleting)}
         onOpenChange={(open) => (!open ? setDeleting(null) : null)}
         onSuccess={showNotice}
       />
+      {importing && (
+        <ImportTradesDialog
+          open={Boolean(importing)}
+          onOpenChange={(open) => (!open ? setImporting(null) : null)}
+          deal={importing.deal}
+          phase={importing.phase}
+          onSuccess={showNotice}
+        />
+      )}
     </section>
   )
 }

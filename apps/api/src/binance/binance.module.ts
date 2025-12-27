@@ -19,5 +19,6 @@ import {
   ],
   controllers: [BinanceController, BinanceSpotController],
   providers: [BinanceService, BinanceSpotClientService, EncryptionService],
+  exports: [BinanceSpotClientService],
 })
 export class BinanceModule {}

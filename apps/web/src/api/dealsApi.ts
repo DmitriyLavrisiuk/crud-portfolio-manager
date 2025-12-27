@@ -1,9 +1,11 @@
 import { apiFetch } from '@/lib/api'
 import {
   type Deal,
+  type DealWithOrderResponse,
   type DealsListResponse,
   type DealsStatsResponse,
   type DealStatus,
+  type ImportTradesResponse,
 } from '@/types/deals'
 
 export type DealEntryPayload = {
@@ -33,6 +35,28 @@ export type UpdateDealPayload = CreateDealPayload
 export type CloseDealPayload = {
   closedAt: string
   exit: DealExitPayload
+}
+
+export type ImportTradesPayload = {
+  phase: 'ENTRY' | 'EXIT'
+  orderId: number
+  symbol?: string
+}
+
+export type OpenDealWithOrderPayload = {
+  symbol: string
+  direction: 'LONG' | 'SHORT'
+  marketBuyMode?: 'QUOTE' | 'BASE'
+  quoteOrderQty?: string
+  quantity?: string
+  note?: string
+}
+
+export type CloseDealWithOrderPayload = {
+  marketBuyMode?: 'QUOTE' | 'BASE'
+  quoteOrderQty?: string
+  quantity?: string
+  note?: string
 }
 
 export type DealsListFilters = {
@@ -121,6 +145,44 @@ export async function fetchDealsStats(
 ) {
   return apiFetch<DealsStatsResponse>(`/deals/stats${buildQuery(filters)}`, {
     method: 'GET',
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function importDealTrades(
+  dealId: string,
+  payload: ImportTradesPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<ImportTradesResponse>(`/deals/${dealId}/import-trades`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function openDealWithOrder(
+  payload: OpenDealWithOrderPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<DealWithOrderResponse>(`/deals/open-with-order`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function closeDealWithOrder(
+  dealId: string,
+  payload: CloseDealWithOrderPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<DealWithOrderResponse>(`/deals/${dealId}/close-with-order`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
     accessToken: auth.accessToken,
     onUnauthorized: auth.onUnauthorized,
   })

@@ -6,6 +6,41 @@ export type DealDirection = 'LONG' | 'SHORT'
 export type DealStatus = 'OPEN' | 'CLOSED'
 
 @Schema({ _id: false })
+export class TradeFill {
+  @Prop({ required: true })
+  id!: number
+
+  @Prop({ required: true })
+  orderId!: number
+
+  @Prop({ required: true, trim: true })
+  price!: string
+
+  @Prop({ required: true, trim: true })
+  qty!: string
+
+  @Prop({ required: true, trim: true })
+  quoteQty!: string
+
+  @Prop({ required: true, trim: true })
+  commission!: string
+
+  @Prop({ required: true, trim: true })
+  commissionAsset!: string
+
+  @Prop({ required: true })
+  time!: number
+
+  @Prop({ required: true })
+  isBuyer!: boolean
+
+  @Prop({ required: true })
+  isMaker!: boolean
+}
+
+export const TradeFillSchema = SchemaFactory.createForClass(TradeFill)
+
+@Schema({ _id: false })
 export class DealLeg {
   @Prop({ required: true, trim: true })
   qty!: string
@@ -50,6 +85,12 @@ export class Deal {
 
   @Prop({ type: DealLegSchema })
   exit?: DealLeg
+
+  @Prop({ type: [TradeFillSchema] })
+  entryTrades?: TradeFill[]
+
+  @Prop({ type: [TradeFillSchema] })
+  exitTrades?: TradeFill[]
 
   @Prop({ trim: true })
   realizedPnl?: string
