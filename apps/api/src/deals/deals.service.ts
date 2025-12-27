@@ -307,6 +307,7 @@ export class DealsService {
 
     const result = this.applyTradesToDeal(deal, payload.phase, trades)
     await deal.save()
+    const leg = this.requireLeg(result.leg, payload.phase)
 
     return {
       dealId: String(deal._id),
@@ -314,11 +315,11 @@ export class DealsService {
       importedCount: result.importedCount,
       totalTradesInPhase: result.totalTrades,
       aggregate: {
-        qty: result.leg.qty,
-        price: result.leg.price,
-        quote: result.leg.quote,
-        fee: result.leg.fee,
-        feeAsset: result.leg.feeAsset,
+        qty: leg.qty,
+        price: leg.price,
+        quote: leg.quote,
+        fee: leg.fee,
+        feeAsset: leg.feeAsset,
       },
       preview: result.preview,
     }
@@ -366,17 +367,18 @@ export class DealsService {
 
     const applied = this.applyTradesToDeal(deal, 'ENTRY', trades)
     await deal.save()
+    const leg = this.requireLeg(applied.leg, 'ENTRY')
 
     return {
       deal: this.mapDeal(deal),
       binance: { orderId: order.orderId, side, type: 'MARKET' as const },
       importedCount: applied.importedCount,
       aggregate: {
-        qty: applied.leg.qty,
-        price: applied.leg.price,
-        quote: applied.leg.quote,
-        fee: applied.leg.fee,
-        feeAsset: applied.leg.feeAsset,
+        qty: leg.qty,
+        price: leg.price,
+        quote: leg.quote,
+        fee: leg.fee,
+        feeAsset: leg.feeAsset,
       },
     }
   }
@@ -437,17 +439,18 @@ export class DealsService {
     }
 
     await deal.save()
+    const leg = this.requireLeg(applied.leg, 'EXIT')
 
     return {
       deal: this.mapDeal(deal),
       binance: { orderId: order.orderId, side, type: 'MARKET' as const },
       importedCount: applied.importedCount,
       aggregate: {
-        qty: applied.leg.qty,
-        price: applied.leg.price,
-        quote: applied.leg.quote,
-        fee: applied.leg.fee,
-        feeAsset: applied.leg.feeAsset,
+        qty: leg.qty,
+        price: leg.price,
+        quote: leg.quote,
+        fee: leg.fee,
+        feeAsset: leg.feeAsset,
       },
     }
   }
@@ -701,6 +704,13 @@ export class DealsService {
     void __v
     void userId
     return { ...rest, id: String(_id) }
+  }
+
+  private requireLeg(leg: DealLeg | undefined, phase: 'ENTRY' | 'EXIT') {
+    if (!leg) {
+      throw new BadRequestException(`${phase} leg is required`)
+    }
+    return leg
   }
 
   private computePnl(
