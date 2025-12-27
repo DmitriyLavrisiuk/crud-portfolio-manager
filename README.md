@@ -1,4 +1,4 @@
-# CRUD Portfolio Manager (v0.6.0)
+# CRUD Portfolio Manager (v0.7.0)
 
 Monorepo scaffold with a Vite + React web app and a NestJS API.
 
@@ -21,16 +21,21 @@ Copy example env files and adjust if needed:
 - `apps/web/.env.example` -> `apps/web/.env`
 - `apps/api/.env.example` -> `apps/api/.env`
 
-### API env (auth)
+### Web env
 
-- `JWT_ACCESS_SECRET`
-- `JWT_REFRESH_SECRET`
-- `JWT_ACCESS_TTL` (e.g. `15m`)
-- `JWT_REFRESH_TTL` (e.g. `7d`)
-- `COOKIE_SECURE` (`true`/`false`)
-- `MASTER_KEY_HEX` (64 hex chars, AES-256-GCM key)
-- `BINANCE_SPOT_BASE_URL` (optional, default `https://api.binance.com`)
-  - Use `https://testnet.binance.vision` for Spot testnet.
+- `VITE_API_URL` (required)
+
+### API env
+
+- `PORT` (required)
+- `MONGO_URI` (required)
+- `JWT_ACCESS_SECRET` (required)
+- `JWT_REFRESH_SECRET` (required)
+- `JWT_ACCESS_TTL` (required, e.g. `15m`)
+- `JWT_REFRESH_TTL` (required, e.g. `7d`)
+- `COOKIE_SECURE` (required, `true`/`false`)
+- `MASTER_KEY_HEX` (required, 64 hex chars; AES-256-GCM key for encrypted fields)
+- `BINANCE_SPOT_BASE_URL` (optional; use `https://testnet.binance.vision` for Spot testnet)
 
 ## Run database
 
@@ -89,8 +94,37 @@ pnpm dev
 - Place order: `POST http://localhost:4000/binance/spot/order`
 - Cancel order: `DELETE http://localhost:4000/binance/spot/order`
 - Query order: `GET http://localhost:4000/binance/spot/order?symbol=BTCUSDT&orderId=...`
+- My trades: `GET http://localhost:4000/binance/spot/my-trades?symbol=BTCUSDT`
+- Cancel replace: `POST http://localhost:4000/binance/spot/order/cancel-replace`
 - UI: `http://localhost:5173/spot`
 - Note: for TRADE endpoints, enable trading permissions for the key in Binance API management.
+
+## Deals (v0.7.0)
+
+- Create: `POST http://localhost:4000/deals`
+- List: `GET http://localhost:4000/deals?from&to&symbol&status`
+- Get by id: `GET http://localhost:4000/deals/:id`
+- Update: `PATCH http://localhost:4000/deals/:id`
+- Close: `POST http://localhost:4000/deals/:id/close`
+- Delete: `DELETE http://localhost:4000/deals/:id`
+- Stats: `GET http://localhost:4000/deals/stats?from&to&symbol&status`
+- UI: `http://localhost:5173/deals`
+
+## UI routes
+
+- `/login`, `/register`
+- `/transactions`
+- `/deals`
+- `/spot`
+- `/settings`
+- `/admin/users` (admin only)
+
+## Version notes
+
+- v0.7.0
+  - Deals module (manual deals): CRUD, close flow, realized PnL via Big.js, stats endpoint.
+  - Deals UI: list with filters, create/edit/close/delete dialogs, stats card synced to filters.
+  - Spot UI continues to support testnet operations via configured base URL.
 
 ## Troubleshooting
 
