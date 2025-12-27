@@ -9,6 +9,34 @@ export type DealLeg = {
   feeAsset?: string
 }
 
+export type TradeFill = {
+  id: number
+  orderId: number
+  price: string
+  qty: string
+  quoteQty: string
+  commission: string
+  commissionAsset: string
+  time: number
+  isBuyer: boolean
+  isMaker: boolean
+}
+
+export type ImportTradesResponse = {
+  dealId: string
+  phase: 'ENTRY' | 'EXIT'
+  importedCount: number
+  totalTradesInPhase: number
+  aggregate: {
+    qty: string
+    price: string
+    quote: string
+    fee?: string
+    feeAsset?: string
+  }
+  preview: TradeFill[]
+}
+
 export type Deal = {
   id: string
   _id?: string

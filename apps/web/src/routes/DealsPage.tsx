@@ -32,6 +32,7 @@ import CreateDealDialog from '@/components/deals/CreateDealDialog'
 import EditDealDialog from '@/components/deals/EditDealDialog'
 import CloseDealDialog from '@/components/deals/CloseDealDialog'
 import DeleteDealDialog from '@/components/deals/DeleteDealDialog'
+import ImportTradesDialog from '@/components/deals/ImportTradesDialog'
 
 type FiltersState = {
   from: string
@@ -73,6 +74,10 @@ export default function DealsPage() {
   const [editing, setEditing] = useState<Deal | null>(null)
   const [closing, setClosing] = useState<Deal | null>(null)
   const [deleting, setDeleting] = useState<Deal | null>(null)
+  const [importing, setImporting] = useState<{
+    deal: Deal
+    phase: 'ENTRY' | 'EXIT'
+  } | null>(null)
 
   useEffect(() => {
     return () => {
@@ -135,6 +140,10 @@ export default function DealsPage() {
     setDeleting(deal)
   }, [])
 
+  const handleImport = useCallback((deal: Deal, phase: 'ENTRY' | 'EXIT') => {
+    setImporting({ deal, phase })
+  }, [])
+
   const formatWinRate = useCallback((value?: number) => {
     if (value === undefined || Number.isNaN(value)) return '0.00%'
     return `${value.toFixed(2)}%`
@@ -187,6 +196,20 @@ export default function DealsPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => handleImport(row.original, 'ENTRY')}
+            >
+              Import entry
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleImport(row.original, 'EXIT')}
+            >
+              Import exit
+            </Button>
+            <Button
+              size="sm"
               variant="secondary"
               onClick={() => handleEdit(row.original)}
             >
@@ -208,7 +231,7 @@ export default function DealsPage() {
         ),
       },
     ],
-    [handleEdit, handleClose, handleDelete],
+    [handleEdit, handleClose, handleDelete, handleImport],
   )
 
   const stats = statsQuery.data
@@ -438,6 +461,15 @@ export default function DealsPage() {
         onOpenChange={(open) => (!open ? setDeleting(null) : null)}
         onSuccess={showNotice}
       />
+      {importing && (
+        <ImportTradesDialog
+          open={Boolean(importing)}
+          onOpenChange={(open) => (!open ? setImporting(null) : null)}
+          deal={importing.deal}
+          phase={importing.phase}
+          onSuccess={showNotice}
+        />
+      )}
     </section>
   )
 }

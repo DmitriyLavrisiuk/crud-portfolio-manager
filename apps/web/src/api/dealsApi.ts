@@ -4,6 +4,7 @@ import {
   type DealsListResponse,
   type DealsStatsResponse,
   type DealStatus,
+  type ImportTradesResponse,
 } from '@/types/deals'
 
 export type DealEntryPayload = {
@@ -33,6 +34,12 @@ export type UpdateDealPayload = CreateDealPayload
 export type CloseDealPayload = {
   closedAt: string
   exit: DealExitPayload
+}
+
+export type ImportTradesPayload = {
+  phase: 'ENTRY' | 'EXIT'
+  orderId: number
+  symbol?: string
 }
 
 export type DealsListFilters = {
@@ -121,6 +128,19 @@ export async function fetchDealsStats(
 ) {
   return apiFetch<DealsStatsResponse>(`/deals/stats${buildQuery(filters)}`, {
     method: 'GET',
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function importDealTrades(
+  dealId: string,
+  payload: ImportTradesPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<ImportTradesResponse>(`/deals/${dealId}/import-trades`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
     accessToken: auth.accessToken,
     onUnauthorized: auth.onUnauthorized,
   })
