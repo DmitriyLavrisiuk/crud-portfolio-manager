@@ -87,7 +87,7 @@ export default function CreateDealDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Deal created')
+      onSuccess?.('Сделка создана')
     },
   })
 
@@ -95,7 +95,7 @@ export default function CreateDealDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create Deal</DialogTitle>
+          <DialogTitle>Создать сделку</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -105,7 +105,7 @@ export default function CreateDealDialog({
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="deal-symbol">Symbol</Label>
+              <Label htmlFor="deal-symbol">Символ</Label>
               <Input id="deal-symbol" {...form.register('symbol')} />
               {form.formState.errors.symbol && (
                 <p className="text-sm text-destructive">
@@ -114,7 +114,7 @@ export default function CreateDealDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="deal-direction">Direction</Label>
+              <Label htmlFor="deal-direction">Направление</Label>
               <Select
                 value={form.watch('direction')}
                 onValueChange={(value) =>
@@ -134,7 +134,7 @@ export default function CreateDealDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="deal-opened-at">Opened At</Label>
+              <Label htmlFor="deal-opened-at">Дата открытия</Label>
               <Input
                 id="deal-opened-at"
                 type="date"
@@ -147,7 +147,7 @@ export default function CreateDealDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="deal-entry-qty">Entry Qty</Label>
+              <Label htmlFor="deal-entry-qty">Объем входа (qty)</Label>
               <Input
                 id="deal-entry-qty"
                 inputMode="decimal"
@@ -158,9 +158,12 @@ export default function CreateDealDialog({
                   {form.formState.errors.entry.qty.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Количество в базовой валюте.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="deal-entry-price">Entry Price</Label>
+              <Label htmlFor="deal-entry-price">Цена входа</Label>
               <Input
                 id="deal-entry-price"
                 inputMode="decimal"
@@ -171,9 +174,12 @@ export default function CreateDealDialog({
                   {form.formState.errors.entry.price.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Цена в котируемой валюте (обычно USDT).
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="deal-entry-fee">Entry Fee</Label>
+              <Label htmlFor="deal-entry-fee">Комиссия входа</Label>
               <Input
                 id="deal-entry-fee"
                 inputMode="decimal"
@@ -186,14 +192,14 @@ export default function CreateDealDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="deal-entry-fee-asset">Entry Fee Asset</Label>
+              <Label htmlFor="deal-entry-fee-asset">Актив комиссии</Label>
               <Input
                 id="deal-entry-fee-asset"
                 {...form.register('entry.feeAsset')}
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="deal-note">Note</Label>
+              <Label htmlFor="deal-note">Заметка</Label>
               <Input id="deal-note" {...form.register('note')} />
               {form.formState.errors.note && (
                 <p className="text-sm text-destructive">
@@ -211,7 +217,7 @@ export default function CreateDealDialog({
 
           <div className="flex justify-end">
             <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Saving...' : 'Create'}
+              {createMutation.isPending ? 'Сохраняем...' : 'Создать'}
             </Button>
           </div>
         </form>

@@ -134,10 +134,12 @@ export class DealsService {
 
     const status = query.status ?? 'ALL'
 
-    const openCount =
+    const [openCount, profitBalance] = await Promise.all([
       status === 'CLOSED'
-        ? 0
-        : await this.dealModel.countDocuments({ ...filter, status: 'OPEN' })
+        ? Promise.resolve(0)
+        : this.dealModel.countDocuments({ ...filter, status: 'OPEN' }),
+      this.getUserProfitBalance(userId),
+    ])
 
     if (status === 'OPEN') {
       return {
@@ -147,6 +149,9 @@ export class DealsService {
         avgPnL: '0',
         feesTotal: '0',
         openCount,
+        totalRealizedPnl: profitBalance.totalRealizedPnl,
+        totalProfitSpent: profitBalance.totalProfitSpent,
+        profitAvailable: profitBalance.profitAvailable,
       }
     }
 
@@ -194,6 +199,9 @@ export class DealsService {
       avgPnL,
       feesTotal: feesTotal.toString(),
       openCount,
+      totalRealizedPnl: profitBalance.totalRealizedPnl,
+      totalProfitSpent: profitBalance.totalProfitSpent,
+      profitAvailable: profitBalance.profitAvailable,
     }
   }
 
@@ -343,6 +351,9 @@ export class DealsService {
       return null
     }
 
+    const profitBalance = await this.getUserProfitBalance(userId)
+    const profitAvailable = this.toBig(profitBalance.profitAvailable)
+
     this.ensureEntryQuote(deal)
     this.applyLegacyEntryAgg(deal)
     const remainingQty = this.getRemainingQty(deal)
@@ -350,16 +361,12 @@ export class DealsService {
       throw new BadRequestException('Deal is fully closed')
     }
 
-    const realizedAvailable = this.getRealizedAvailable(deal)
-    if (this.toBig(deal.realizedPnl ?? '0').lte(0)) {
-      throw new BadRequestException('Realized PnL is not positive')
-    }
-    if (realizedAvailable.lte(0)) {
+    if (profitAvailable.lte(0)) {
       throw new BadRequestException('No available profit')
     }
 
     const amount = this.toBig(data.amount)
-    if (amount.gt(realizedAvailable)) {
+    if (amount.gt(profitAvailable)) {
       throw new BadRequestException('Amount exceeds available profit')
     }
 
@@ -397,6 +404,11 @@ export class DealsService {
 
     await deal.save()
 
+    const profitAvailableAfter = profitAvailable.minus(amount)
+    const totalProfitSpentAfter = this.toBig(
+      profitBalance.totalProfitSpent,
+    ).plus(amount)
+
     return {
       deal: this.mapDeal(deal),
       realizedAvailableAfter: deal.realizedPnlAvailable ?? '0',
@@ -405,6 +417,10 @@ export class DealsService {
         quoteTotal: deal.entryQuoteTotal ?? deal.entry.quote,
         avgPrice: deal.entryAvgPrice ?? deal.entry.price,
       },
+      profitAvailableBefore: profitBalance.profitAvailable,
+      profitAvailableAfter: profitAvailableAfter.toString(),
+      totalProfitSpent: totalProfitSpentAfter.toString(),
+      totalRealizedPnl: profitBalance.totalRealizedPnl,
     }
   }
 
@@ -921,6 +937,31 @@ export class DealsService {
   private updateRealizedAvailable(deal: DealDocument) {
     const available = this.getRealizedAvailable(deal)
     deal.realizedPnlAvailable = available.toString()
+  }
+
+  private async getUserProfitBalance(userId: string) {
+    const deals = await this.dealModel
+      .find({ userId }, { realizedPnl: 1, profitSpentTotal: 1 })
+      .lean()
+    let totalRealized = this.toBig('0')
+    let totalSpent = this.toBig('0')
+
+    for (const deal of deals) {
+      totalRealized = totalRealized.plus(
+        this.toBig(String(deal.realizedPnl ?? '0')),
+      )
+      totalSpent = totalSpent.plus(
+        this.toBig(String(deal.profitSpentTotal ?? '0')),
+      )
+    }
+
+    const profitAvailable = totalRealized.minus(totalSpent)
+
+    return {
+      totalRealizedPnl: totalRealized.toString(),
+      totalProfitSpent: totalSpent.toString(),
+      profitAvailable: profitAvailable.toString(),
+    }
   }
 
   private buildMarketOrderPayload(

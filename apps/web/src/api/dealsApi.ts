@@ -74,6 +74,10 @@ export type ProfitToPositionResponse = {
     quoteTotal: string
     avgPrice: string
   }
+  profitAvailableBefore: string
+  profitAvailableAfter: string
+  totalProfitSpent: string
+  totalRealizedPnl: string
 }
 
 export type ImportTradesPayload = {

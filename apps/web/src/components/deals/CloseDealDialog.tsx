@@ -82,7 +82,7 @@ export default function CloseDealDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Deal closed')
+      onSuccess?.('Сделка закрыта')
     },
   })
 
@@ -90,7 +90,7 @@ export default function CloseDealDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Close Deal</DialogTitle>
+          <DialogTitle>Закрыть сделку</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -98,7 +98,7 @@ export default function CloseDealDialog({
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="close-deal-date">Closed At</Label>
+              <Label htmlFor="close-deal-date">Дата закрытия</Label>
               <Input
                 id="close-deal-date"
                 type="date"
@@ -111,7 +111,7 @@ export default function CloseDealDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="close-deal-exit-qty">Exit Qty</Label>
+              <Label htmlFor="close-deal-exit-qty">Объем выхода (qty)</Label>
               <Input
                 id="close-deal-exit-qty"
                 inputMode="decimal"
@@ -122,9 +122,12 @@ export default function CloseDealDialog({
                   {form.formState.errors.exit.qty.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Количество в базовой валюте.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="close-deal-exit-price">Exit Price</Label>
+              <Label htmlFor="close-deal-exit-price">Цена выхода</Label>
               <Input
                 id="close-deal-exit-price"
                 inputMode="decimal"
@@ -135,9 +138,12 @@ export default function CloseDealDialog({
                   {form.formState.errors.exit.price.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Цена в котируемой валюте (обычно USDT).
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="close-deal-exit-fee">Exit Fee</Label>
+              <Label htmlFor="close-deal-exit-fee">Комиссия выхода</Label>
               <Input
                 id="close-deal-exit-fee"
                 inputMode="decimal"
@@ -150,7 +156,7 @@ export default function CloseDealDialog({
               )}
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="close-deal-exit-fee-asset">Exit Fee Asset</Label>
+              <Label htmlFor="close-deal-exit-fee-asset">Актив комиссии</Label>
               <Input
                 id="close-deal-exit-fee-asset"
                 {...form.register('exit.feeAsset')}
@@ -166,7 +172,7 @@ export default function CloseDealDialog({
 
           <div className="flex justify-end">
             <Button type="submit" disabled={closeMutation.isPending}>
-              {closeMutation.isPending ? 'Closing...' : 'Close deal'}
+              {closeMutation.isPending ? 'Закрываем...' : 'Закрыть сделку'}
             </Button>
           </div>
         </form>

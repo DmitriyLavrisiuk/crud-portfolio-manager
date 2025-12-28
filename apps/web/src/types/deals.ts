@@ -116,4 +116,7 @@ export type DealsStatsResponse = {
   avgPnL: string
   feesTotal: string
   openCount: number
+  totalRealizedPnl: string
+  totalProfitSpent: string
+  profitAvailable: string
 }

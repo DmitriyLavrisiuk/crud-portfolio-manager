@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 import ProtectedRoute from './auth/ProtectedRoute'
 import { useAuth } from './auth/AuthProvider'
@@ -13,6 +13,8 @@ import TransactionsPage from './routes/TransactionsPage'
 
 function Layout() {
   const { user } = useAuth()
+  const location = useLocation()
+  const isDealsRoute = location.pathname.startsWith('/deals')
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `text-sm font-medium ${isActive ? 'text-primary' : 'text-muted-foreground'}`
 
@@ -48,7 +50,9 @@ function Layout() {
           )}
         </nav>
       </header>
-      <main className="mx-auto w-full max-w-4xl px-6 py-8">
+      <main
+        className={`mx-auto w-full px-6 py-8 ${isDealsRoute ? 'max-w-none' : 'max-w-4xl'}`}
+      >
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />

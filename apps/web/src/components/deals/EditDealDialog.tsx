@@ -105,7 +105,7 @@ export default function EditDealDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Deal updated')
+      onSuccess?.('Сделка обновлена')
     },
   })
 
@@ -113,7 +113,7 @@ export default function EditDealDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Deal</DialogTitle>
+          <DialogTitle>Редактировать сделку</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -123,7 +123,7 @@ export default function EditDealDialog({
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="edit-deal-symbol">Symbol</Label>
+              <Label htmlFor="edit-deal-symbol">Символ</Label>
               <Input id="edit-deal-symbol" {...form.register('symbol')} />
               {form.formState.errors.symbol && (
                 <p className="text-sm text-destructive">
@@ -132,7 +132,7 @@ export default function EditDealDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-deal-direction">Direction</Label>
+              <Label htmlFor="edit-deal-direction">Направление</Label>
               <Select
                 value={form.watch('direction')}
                 onValueChange={(value) =>
@@ -152,7 +152,7 @@ export default function EditDealDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-deal-opened-at">Opened At</Label>
+              <Label htmlFor="edit-deal-opened-at">Дата открытия</Label>
               <Input
                 id="edit-deal-opened-at"
                 type="date"
@@ -165,7 +165,7 @@ export default function EditDealDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-deal-entry-qty">Entry Qty</Label>
+              <Label htmlFor="edit-deal-entry-qty">Объем входа (qty)</Label>
               <Input
                 id="edit-deal-entry-qty"
                 inputMode="decimal"
@@ -176,9 +176,12 @@ export default function EditDealDialog({
                   {form.formState.errors.entry.qty.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Количество в базовой валюте.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-deal-entry-price">Entry Price</Label>
+              <Label htmlFor="edit-deal-entry-price">Цена входа</Label>
               <Input
                 id="edit-deal-entry-price"
                 inputMode="decimal"
@@ -189,9 +192,12 @@ export default function EditDealDialog({
                   {form.formState.errors.entry.price.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Цена в котируемой валюте (обычно USDT).
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-deal-entry-fee">Entry Fee</Label>
+              <Label htmlFor="edit-deal-entry-fee">Комиссия входа</Label>
               <Input
                 id="edit-deal-entry-fee"
                 inputMode="decimal"
@@ -204,14 +210,14 @@ export default function EditDealDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-deal-entry-fee-asset">Entry Fee Asset</Label>
+              <Label htmlFor="edit-deal-entry-fee-asset">Актив комиссии</Label>
               <Input
                 id="edit-deal-entry-fee-asset"
                 {...form.register('entry.feeAsset')}
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="edit-deal-note">Note</Label>
+              <Label htmlFor="edit-deal-note">Заметка</Label>
               <Input id="edit-deal-note" {...form.register('note')} />
               {form.formState.errors.note && (
                 <p className="text-sm text-destructive">
@@ -229,7 +235,7 @@ export default function EditDealDialog({
 
           <div className="flex justify-end">
             <Button type="submit" disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? 'Saving...' : 'Save changes'}
+              {updateMutation.isPending ? 'Сохраняем...' : 'Сохранить'}
             </Button>
           </div>
         </form>

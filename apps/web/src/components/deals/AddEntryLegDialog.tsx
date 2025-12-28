@@ -90,7 +90,7 @@ export default function AddEntryLegDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Entry leg added')
+      onSuccess?.('Вход добавлен')
     },
   })
 
@@ -98,7 +98,7 @@ export default function AddEntryLegDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Entry (DCA)</DialogTitle>
+          <DialogTitle>Добавить вход (DCA)</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -106,7 +106,7 @@ export default function AddEntryLegDialog({
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="add-entry-date">Opened At</Label>
+              <Label htmlFor="add-entry-date">Дата входа</Label>
               <Input
                 id="add-entry-date"
                 type="date"
@@ -119,7 +119,7 @@ export default function AddEntryLegDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add-entry-qty">Entry Qty</Label>
+              <Label htmlFor="add-entry-qty">Объем входа (qty)</Label>
               <Input
                 id="add-entry-qty"
                 inputMode="decimal"
@@ -130,9 +130,12 @@ export default function AddEntryLegDialog({
                   {form.formState.errors.entry.qty.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Количество в базовой валюте.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add-entry-price">Entry Price</Label>
+              <Label htmlFor="add-entry-price">Цена входа</Label>
               <Input
                 id="add-entry-price"
                 inputMode="decimal"
@@ -143,9 +146,12 @@ export default function AddEntryLegDialog({
                   {form.formState.errors.entry.price.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Цена в котируемой валюте (обычно USDT).
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add-entry-fee">Entry Fee</Label>
+              <Label htmlFor="add-entry-fee">Комиссия входа</Label>
               <Input
                 id="add-entry-fee"
                 inputMode="decimal"
@@ -158,14 +164,14 @@ export default function AddEntryLegDialog({
               )}
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="add-entry-fee-asset">Entry Fee Asset</Label>
+              <Label htmlFor="add-entry-fee-asset">Актив комиссии</Label>
               <Input
                 id="add-entry-fee-asset"
                 {...form.register('entry.feeAsset')}
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="add-entry-note">Note</Label>
+              <Label htmlFor="add-entry-note">Заметка</Label>
               <Input id="add-entry-note" {...form.register('note')} />
               {form.formState.errors.note && (
                 <p className="text-sm text-destructive">
@@ -183,7 +189,7 @@ export default function AddEntryLegDialog({
 
           <div className="flex justify-end">
             <Button type="submit" disabled={addMutation.isPending}>
-              {addMutation.isPending ? 'Saving...' : 'Add entry'}
+              {addMutation.isPending ? 'Сохраняем...' : 'Добавить вход'}
             </Button>
           </div>
         </form>

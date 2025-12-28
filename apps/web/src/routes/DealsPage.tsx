@@ -6,12 +6,15 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
+import { format } from 'date-fns'
 
 import { useAuth } from '@/auth/AuthProvider'
 import { fetchDeals, fetchDealsStats } from '@/api/dealsApi'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -28,6 +31,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { type Deal, type DealStatus } from '@/types/deals'
+import {
+  formatMoneyLike,
+  formatNum,
+  formatPrice,
+  formatQty,
+} from '@/lib/format'
+import { cn } from '@/lib/utils'
 import CreateDealDialog from '@/components/deals/CreateDealDialog'
 import EditDealDialog from '@/components/deals/EditDealDialog'
 import CloseDealDialog from '@/components/deals/CloseDealDialog'
@@ -38,16 +48,26 @@ import DeleteDealDialog from '@/components/deals/DeleteDealDialog'
 import ImportTradesDialog from '@/components/deals/ImportTradesDialog'
 import OpenWithOrderDialog from '@/components/deals/OpenWithOrderDialog'
 import CloseWithOrderDialog from '@/components/deals/CloseWithOrderDialog'
+import DealsRowActions from '@/components/deals/DealsRowActions'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 
 type FiltersState = {
-  from: string
-  to: string
+  from: Date | null
+  to: Date | null
   status: 'ALL' | DealStatus
   symbol: string
 }
 
 function formatDateInput(date: Date) {
-  return date.toISOString().slice(0, 10)
+  return format(date, 'yyyy-MM-dd')
+}
+
+function formatDateLabel(date: Date) {
+  return format(date, 'dd.MM.yyyy')
 }
 
 function getDefaultFilters(): FiltersState {
@@ -56,8 +76,8 @@ function getDefaultFilters(): FiltersState {
   from.setDate(today.getDate() - 30)
 
   return {
-    from: formatDateInput(from),
-    to: formatDateInput(today),
+    from,
+    to: today,
     status: 'ALL',
     symbol: '',
   }
@@ -110,8 +130,10 @@ export default function DealsPage() {
   const queryFilters = useMemo(() => {
     const symbol = normalizeSymbol(appliedFilters.symbol)
     return {
-      from: appliedFilters.from || undefined,
-      to: appliedFilters.to || undefined,
+      from: appliedFilters.from
+        ? formatDateInput(appliedFilters.from)
+        : undefined,
+      to: appliedFilters.to ? formatDateInput(appliedFilters.to) : undefined,
       status:
         appliedFilters.status === 'ALL' ? undefined : appliedFilters.status,
       symbol: symbol || undefined,
@@ -171,152 +193,134 @@ export default function DealsPage() {
   }, [])
 
   const formatWinRate = useCallback((value?: number) => {
-    if (value === undefined || Number.isNaN(value)) return '0.00%'
-    return `${value.toFixed(2)}%`
+    if (value === undefined || Number.isNaN(value)) return '0%'
+    return `${formatNum(value, { maxFrac: 2 })}%`
   }, [])
 
   const columns = useMemo<ColumnDef<Deal>[]>(
     () => [
       {
+        id: 'rowNumber',
+        header: '#',
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground">
+            {row.index + 1}
+          </span>
+        ),
+        meta: {
+          headerClassName: 'sticky left-0 z-30 bg-background text-xs',
+          cellClassName: 'sticky left-0 z-20 bg-background',
+          sizeClassName: 'w-10',
+        },
+      },
+      {
         accessorKey: 'openedAt',
-        header: 'Opened',
+        header: 'Открыта',
         cell: ({ row }) =>
           row.original.openedAt
             ? new Date(row.original.openedAt).toLocaleDateString()
             : '-',
+        meta: {
+          headerClassName: 'sticky left-10 z-30 bg-background text-xs',
+          cellClassName: 'sticky left-10 z-20 bg-background',
+          sizeClassName: 'w-28',
+        },
       },
       {
         accessorKey: 'symbol',
-        header: 'Symbol',
+        header: 'Символ',
         cell: ({ getValue }) => getValue(),
+        meta: {
+          headerClassName: 'sticky left-[9.5rem] z-30 bg-background text-xs',
+          cellClassName: 'sticky left-[9.5rem] z-20 bg-background',
+          sizeClassName: 'w-24',
+        },
       },
       {
         accessorKey: 'direction',
-        header: 'Direction',
+        header: 'Направление',
         cell: ({ getValue }) => getValue(),
       },
       {
         accessorKey: 'status',
-        header: 'Status',
-        cell: ({ getValue }) => getValue(),
+        header: 'Статус',
+        cell: ({ getValue }) => (getValue() === 'OPEN' ? 'ОТКРЫТА' : 'ЗАКРЫТА'),
+        meta: {
+          headerClassName: 'sticky left-[15.5rem] z-30 bg-background text-xs',
+          cellClassName: 'sticky left-[15.5rem] z-20 bg-background',
+          sizeClassName: 'w-24',
+        },
       },
       {
         id: 'entryQuote',
-        header: 'Entry Quote',
-        cell: ({ row }) => row.original.entry?.quote ?? '-',
+        header: 'Вход (quote)',
+        cell: ({ row }) => formatMoneyLike(row.original.entry?.quote),
       },
       {
         accessorKey: 'entryAvgPrice',
-        header: 'Entry Avg',
+        header: 'Средняя цена входа',
         cell: ({ row }) =>
-          row.original.entryAvgPrice ?? row.original.entry?.price ?? '-',
+          formatPrice(row.original.entryAvgPrice ?? row.original.entry?.price),
       },
       {
         accessorKey: 'closedQty',
-        header: 'Closed Qty',
-        cell: ({ row }) => row.original.closedQty ?? '-',
+        header: 'Закрыто (qty)',
+        cell: ({ row }) => formatQty(row.original.closedQty),
       },
       {
         accessorKey: 'remainingQty',
-        header: 'Remaining Qty',
-        cell: ({ row }) => row.original.remainingQty ?? '-',
+        header: 'Остаток (qty)',
+        cell: ({ row }) => formatQty(row.original.remainingQty),
       },
       {
         id: 'exitQuote',
-        header: 'Exit Quote',
-        cell: ({ row }) => row.original.exit?.quote ?? '-',
+        header: 'Выход (quote)',
+        cell: ({ row }) => formatMoneyLike(row.original.exit?.quote),
       },
       {
         accessorKey: 'realizedPnl',
         header: 'PnL',
-        cell: ({ row }) => row.original.realizedPnl ?? '-',
+        cell: ({ row }) => formatMoneyLike(row.original.realizedPnl),
       },
       {
         accessorKey: 'realizedPnlAvailable',
-        header: 'Avail PnL',
+        header: 'Доступная прибыль',
         cell: ({ row }) => {
           const deal = row.original
           if (deal.realizedPnlAvailable !== undefined) {
-            return deal.realizedPnlAvailable
+            return formatMoneyLike(deal.realizedPnlAvailable)
           }
           if (deal.realizedPnl && deal.profitSpentTotal) {
             const value =
               Number(deal.realizedPnl) - Number(deal.profitSpentTotal)
-            return Number.isFinite(value) ? value.toString() : '-'
+            return Number.isFinite(value) ? formatMoneyLike(value) : '-'
           }
-          return deal.realizedPnl ?? '-'
+          return formatMoneyLike(deal.realizedPnl)
         },
       },
       {
         id: 'actions',
-        header: 'Actions',
+        header: 'Действия',
         cell: ({ row }) => (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleImport(row.original, 'ENTRY')}
-            >
-              Import entry
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleImport(row.original, 'EXIT')}
-            >
-              Import exit
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => handleEdit(row.original)}
-            >
-              Edit
-            </Button>
-            {row.original.status === 'OPEN' && (
-              <>
-                <Button size="sm" onClick={() => handleClose(row.original)}>
-                  Close
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleAddEntry(row.original)}
-                >
-                  Add entry (DCA)
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleProfitToPosition(row.original)}
-                >
-                  Profit to position
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handlePartialClose(row.original)}
-                >
-                  Partial close
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCloseWithOrder(row.original)}
-                >
-                  Close with order
-                </Button>
-              </>
-            )}
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => handleDelete(row.original)}
-            >
-              Delete
-            </Button>
-          </div>
+          <DealsRowActions
+            deal={row.original}
+            onImportEntry={(deal) => handleImport(deal, 'ENTRY')}
+            onImportExit={(deal) => handleImport(deal, 'EXIT')}
+            onEdit={handleEdit}
+            onAddEntry={handleAddEntry}
+            onProfitToPosition={handleProfitToPosition}
+            onPartialClose={handlePartialClose}
+            onClose={handleClose}
+            onCloseWithOrder={handleCloseWithOrder}
+            onDelete={handleDelete}
+          />
         ),
+        meta: {
+          headerClassName:
+            'sticky right-0 z-30 bg-background text-xs text-right',
+          cellClassName: 'sticky right-0 z-20 bg-background text-right',
+          sizeClassName: 'w-16',
+        },
       },
     ],
     [
@@ -359,44 +363,60 @@ export default function DealsPage() {
     <section className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Stats</CardTitle>
+          <CardTitle>Статистика</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <p className="text-sm text-muted-foreground">Total PnL</p>
+              <p className="text-sm text-muted-foreground">Общий PnL</p>
               <p className="text-lg font-semibold">
-                {statsLoading ? 'Loading...' : (stats?.totalPnL ?? '0')}
+                {statsLoading
+                  ? 'Загрузка...'
+                  : formatMoneyLike(stats?.totalPnL ?? '0')}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Trades (CLOSED)</p>
+              <p className="text-sm text-muted-foreground">Сделок (закрытые)</p>
               <p className="text-lg font-semibold">
-                {statsLoading ? 'Loading...' : (stats?.tradesCount ?? 0)}
+                {statsLoading ? 'Загрузка...' : (stats?.tradesCount ?? 0)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Win rate</p>
+              <p className="text-sm text-muted-foreground">
+                Процент прибыльных
+              </p>
               <p className="text-lg font-semibold">
-                {statsLoading ? 'Loading...' : formatWinRate(stats?.winRate)}
+                {statsLoading ? 'Загрузка...' : formatWinRate(stats?.winRate)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Avg PnL</p>
+              <p className="text-sm text-muted-foreground">Средний PnL</p>
               <p className="text-lg font-semibold">
-                {statsLoading ? 'Loading...' : (stats?.avgPnL ?? '0')}
+                {statsLoading
+                  ? 'Загрузка...'
+                  : formatMoneyLike(stats?.avgPnL ?? '0')}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Fees total</p>
+              <p className="text-sm text-muted-foreground">Комиссии</p>
               <p className="text-lg font-semibold">
-                {statsLoading ? 'Loading...' : (stats?.feesTotal ?? '0')}
+                {statsLoading
+                  ? 'Загрузка...'
+                  : formatMoneyLike(stats?.feesTotal ?? '0')}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Open deals</p>
+              <p className="text-sm text-muted-foreground">Открытых сделок</p>
               <p className="text-lg font-semibold">
-                {statsLoading ? 'Loading...' : (stats?.openCount ?? 0)}
+                {statsLoading ? 'Загрузка...' : (stats?.openCount ?? 0)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Доступная прибыль</p>
+              <p className="text-lg font-semibold">
+                {statsLoading
+                  ? 'Загрузка...'
+                  : formatMoneyLike(stats?.profitAvailable ?? '0')}
               </p>
             </div>
           </div>
@@ -408,75 +428,130 @@ export default function DealsPage() {
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <CardTitle>Deals</CardTitle>
+            <CardTitle>Сделки</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Manual deals overview.
+              Управление сделками.
             </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setCreateOpen(true)}>Создать сделку</Button>
+            <Button
+              variant="outline"
+              onClick={() => setOpenWithOrderOpen(true)}
+            >
+              Открыть через ордер
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
-            <Input
-              type="date"
-              value={draftFilters.from}
-              onChange={(event) =>
-                setDraftFilters((prev) => ({
-                  ...prev,
-                  from: event.target.value,
-                }))
-              }
-            />
-            <Input
-              type="date"
-              value={draftFilters.to}
-              onChange={(event) =>
-                setDraftFilters((prev) => ({
-                  ...prev,
-                  to: event.target.value,
-                }))
-              }
-            />
-            <Input
-              placeholder="Symbol"
-              value={draftFilters.symbol}
-              onChange={(event) =>
-                setDraftFilters((prev) => ({
-                  ...prev,
-                  symbol: event.target.value.toUpperCase(),
-                }))
-              }
-            />
-            <Select
-              value={draftFilters.status}
-              onValueChange={(value) =>
-                setDraftFilters((prev) => ({
-                  ...prev,
-                  status: value as FiltersState['status'],
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All</SelectItem>
-                <SelectItem value="OPEN">OPEN</SelectItem>
-                <SelectItem value="CLOSED">CLOSED</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={handleApply}>
-                Apply
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex min-w-[180px] flex-col gap-2">
+              <Label>С</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'justify-start text-left font-normal',
+                      !draftFilters.from && 'text-muted-foreground',
+                    )}
+                  >
+                    {draftFilters.from
+                      ? formatDateLabel(draftFilters.from)
+                      : 'Выберите дату'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={draftFilters.from ?? undefined}
+                    onSelect={(date) =>
+                      setDraftFilters((prev) => ({
+                        ...prev,
+                        from: date ?? null,
+                      }))
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="flex min-w-[180px] flex-col gap-2">
+              <Label>По</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'justify-start text-left font-normal',
+                      !draftFilters.to && 'text-muted-foreground',
+                    )}
+                  >
+                    {draftFilters.to
+                      ? formatDateLabel(draftFilters.to)
+                      : 'Выберите дату'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={draftFilters.to ?? undefined}
+                    onSelect={(date) =>
+                      setDraftFilters((prev) => ({ ...prev, to: date ?? null }))
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="flex min-w-[180px] flex-1 flex-col gap-2">
+              <Label>Символ</Label>
+              <Input
+                placeholder="Символ"
+                value={draftFilters.symbol}
+                onChange={(event) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    symbol: event.target.value.toUpperCase(),
+                  }))
+                }
+              />
+            </div>
+            <div className="flex min-w-[180px] flex-col gap-2">
+              <Label>Статус</Label>
+              <Select
+                value={draftFilters.status}
+                onValueChange={(value) =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    status: value as FiltersState['status'],
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Статус" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Все</SelectItem>
+                  <SelectItem value="OPEN">Открытые</SelectItem>
+                  <SelectItem value="CLOSED">Закрытые</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="inline-flex">
+              <Button
+                variant="secondary"
+                className="rounded-r-none"
+                onClick={handleApply}
+              >
+                Применить
               </Button>
-              <Button variant="outline" onClick={handleReset}>
-                Reset
-              </Button>
-              <Button onClick={() => setCreateOpen(true)}>Create deal</Button>
               <Button
                 variant="outline"
-                onClick={() => setOpenWithOrderOpen(true)}
+                className="rounded-l-none border-l-0"
+                onClick={handleReset}
               >
-                Open with order
+                Сбросить
               </Button>
             </div>
           </div>
@@ -487,7 +562,7 @@ export default function DealsPage() {
             </p>
           )}
           {dealsQuery.isLoading && (
-            <p className="text-sm text-muted-foreground">Loading deals...</p>
+            <p className="text-sm text-muted-foreground">Загрузка сделок...</p>
           )}
           {dealsQuery.error instanceof Error && (
             <p className="text-sm text-destructive">
@@ -496,13 +571,20 @@ export default function DealsPage() {
           )}
 
           {!dealsQuery.isLoading && (
-            <div className="rounded-md border border-border">
-              <Table>
+            <div className="w-full overflow-x-auto rounded-md border border-border">
+              <Table className="min-w-[1200px]">
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
                     <TableRow key={headerGroup.id}>
                       {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id}>
+                        <TableHead
+                          key={header.id}
+                          className={cn(
+                            'px-3 py-2 text-xs font-medium text-muted-foreground',
+                            header.column.columnDef.meta?.headerClassName,
+                            header.column.columnDef.meta?.sizeClassName,
+                          )}
+                        >
                           {header.isPlaceholder
                             ? null
                             : flexRender(
@@ -519,7 +601,14 @@ export default function DealsPage() {
                     table.getRowModel().rows.map((row) => (
                       <TableRow key={row.id}>
                         {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
+                          <TableCell
+                            key={cell.id}
+                            className={cn(
+                              'px-3 py-2 text-sm',
+                              cell.column.columnDef.meta?.cellClassName,
+                              cell.column.columnDef.meta?.sizeClassName,
+                            )}
+                          >
                             {flexRender(
                               cell.column.columnDef.cell,
                               cell.getContext(),
@@ -531,7 +620,7 @@ export default function DealsPage() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={columns.length}>
-                        No deals found.
+                        Сделки не найдены.
                       </TableCell>
                     </TableRow>
                   )}
@@ -578,6 +667,7 @@ export default function DealsPage() {
       />
       <ProfitToPositionDialog
         deal={profitToPosition}
+        availableProfit={stats?.profitAvailable}
         open={Boolean(profitToPosition)}
         onOpenChange={(open) => (!open ? setProfitToPosition(null) : null)}
         onSuccess={showNotice}

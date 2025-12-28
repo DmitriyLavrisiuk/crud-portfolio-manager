@@ -44,7 +44,7 @@ export default function DeleteDealDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Deal deleted')
+      onSuccess?.('Сделка удалена')
     },
   })
 
@@ -52,9 +52,9 @@ export default function DeleteDealDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete deal?</AlertDialogTitle>
+          <AlertDialogTitle>Удалить сделку?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone.
+            Это действие нельзя отменить.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {deleteMutation.error instanceof Error && (
@@ -64,13 +64,13 @@ export default function DeleteDealDialog({
         )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleteMutation.isPending}>
-            Cancel
+            Отмена
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={() => deleteMutation.mutate()}
             disabled={deleteMutation.isPending}
           >
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            {deleteMutation.isPending ? 'Удаляем...' : 'Удалить'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

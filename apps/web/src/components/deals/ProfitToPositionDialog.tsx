@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { type Deal } from '@/types/deals'
+import { formatMoneyLike, formatPrice, formatQty } from '@/lib/format'
 import {
   profitToPositionSchema,
   type ProfitToPositionFormValues,
@@ -22,34 +23,22 @@ import {
 
 type ProfitToPositionDialogProps = {
   deal: Deal | null
+  availableProfit?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: (message: string) => void
 }
 
-function getAvailableProfit(deal: Deal | null) {
-  if (!deal) return '0'
-  if (deal.realizedPnlAvailable !== undefined) {
-    return deal.realizedPnlAvailable
-  }
-  if (deal.realizedPnl && deal.profitSpentTotal) {
-    const available = Number(deal.realizedPnl) - Number(deal.profitSpentTotal)
-    if (Number.isFinite(available)) {
-      return available.toString()
-    }
-  }
-  return deal.realizedPnl ?? '0'
-}
-
 export default function ProfitToPositionDialog({
   deal,
+  availableProfit,
   open,
   onOpenChange,
   onSuccess,
 }: ProfitToPositionDialogProps) {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
-  const availableProfit = useMemo(() => getAvailableProfit(deal), [deal])
+  const resolvedAvailable = availableProfit ?? deal?.realizedPnlAvailable ?? '0'
 
   const form = useForm<ProfitToPositionFormValues>({
     resolver: zodResolver(profitToPositionSchema),
@@ -76,6 +65,11 @@ export default function ProfitToPositionDialog({
       if (!deal) {
         throw new Error('No deal selected')
       }
+      if (Number.isFinite(Number(resolvedAvailable))) {
+        if (Number(values.amount) > Number(resolvedAvailable)) {
+          throw new Error('Сумма превышает доступную прибыль')
+        }
+      }
       const payload = {
         amount: values.amount,
         price: values.price,
@@ -91,7 +85,7 @@ export default function ProfitToPositionDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Profit reinvested')
+      onSuccess?.('Прибыль реинвестирована')
     },
   })
 
@@ -99,7 +93,7 @@ export default function ProfitToPositionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Profit to Position</DialogTitle>
+          <DialogTitle>Реинвестировать прибыль</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -107,12 +101,18 @@ export default function ProfitToPositionDialog({
             profitMutation.mutate(values),
           )}
         >
-          <p className="text-sm text-muted-foreground">
-            Available profit: {availableProfit}
-          </p>
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">
+              Доступная прибыль (все сделки):{' '}
+              {formatMoneyLike(resolvedAvailable)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Сумма будет учтена как новый вход (DCA) без отправки ордера.
+            </p>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="profit-amount">Amount (quote)</Label>
+              <Label htmlFor="profit-amount">Сумма (quote)</Label>
               <Input
                 id="profit-amount"
                 inputMode="decimal"
@@ -125,7 +125,7 @@ export default function ProfitToPositionDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="profit-price">Price</Label>
+              <Label htmlFor="profit-price">Цена</Label>
               <Input
                 id="profit-price"
                 inputMode="decimal"
@@ -138,7 +138,7 @@ export default function ProfitToPositionDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="profit-at">At</Label>
+              <Label htmlFor="profit-at">Дата</Label>
               <Input id="profit-at" type="date" {...form.register('at')} />
               {form.formState.errors.at && (
                 <p className="text-sm text-destructive">
@@ -147,13 +147,29 @@ export default function ProfitToPositionDialog({
               )}
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="profit-note">Note</Label>
+              <Label htmlFor="profit-note">Заметка</Label>
               <Input id="profit-note" {...form.register('note')} />
               {form.formState.errors.note && (
                 <p className="text-sm text-destructive">
                   {form.formState.errors.note.message}
                 </p>
               )}
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <p className="text-xs text-muted-foreground">
+                Примерный объём:{' '}
+                {formatQty(
+                  Number(form.watch('amount')) && Number(form.watch('price'))
+                    ? String(
+                        Number(form.watch('amount')) /
+                          Number(form.watch('price')),
+                      )
+                    : undefined,
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Оценка цены: {formatPrice(form.watch('price'))}
+              </p>
             </div>
           </div>
 
@@ -165,7 +181,7 @@ export default function ProfitToPositionDialog({
 
           <div className="flex justify-end">
             <Button type="submit" disabled={profitMutation.isPending}>
-              {profitMutation.isPending ? 'Applying...' : 'Reinvest'}
+              {profitMutation.isPending ? 'Применяем...' : 'Реинвестировать'}
             </Button>
           </div>
         </form>

@@ -90,7 +90,7 @@ export default function PartialCloseDealDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Deal partially closed')
+      onSuccess?.('Сделка частично закрыта')
     },
   })
 
@@ -98,7 +98,7 @@ export default function PartialCloseDealDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Partial Close</DialogTitle>
+          <DialogTitle>Частичное закрытие</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -106,7 +106,7 @@ export default function PartialCloseDealDialog({
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="partial-close-date">Closed At</Label>
+              <Label htmlFor="partial-close-date">Дата закрытия</Label>
               <Input
                 id="partial-close-date"
                 type="date"
@@ -119,7 +119,7 @@ export default function PartialCloseDealDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="partial-close-exit-qty">Exit Qty</Label>
+              <Label htmlFor="partial-close-exit-qty">Объем выхода (qty)</Label>
               <Input
                 id="partial-close-exit-qty"
                 inputMode="decimal"
@@ -130,9 +130,12 @@ export default function PartialCloseDealDialog({
                   {form.formState.errors.exit.qty.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Количество в базовой валюте.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="partial-close-exit-price">Exit Price</Label>
+              <Label htmlFor="partial-close-exit-price">Цена выхода</Label>
               <Input
                 id="partial-close-exit-price"
                 inputMode="decimal"
@@ -143,9 +146,12 @@ export default function PartialCloseDealDialog({
                   {form.formState.errors.exit.price.message}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Цена в котируемой валюте (обычно USDT).
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="partial-close-exit-fee">Exit Fee</Label>
+              <Label htmlFor="partial-close-exit-fee">Комиссия выхода</Label>
               <Input
                 id="partial-close-exit-fee"
                 inputMode="decimal"
@@ -159,7 +165,7 @@ export default function PartialCloseDealDialog({
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="partial-close-exit-fee-asset">
-                Exit Fee Asset
+                Актив комиссии
               </Label>
               <Input
                 id="partial-close-exit-fee-asset"
@@ -167,7 +173,7 @@ export default function PartialCloseDealDialog({
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="partial-close-note">Note</Label>
+              <Label htmlFor="partial-close-note">Заметка</Label>
               <Input id="partial-close-note" {...form.register('note')} />
               {form.formState.errors.note && (
                 <p className="text-sm text-destructive">
@@ -185,7 +191,7 @@ export default function PartialCloseDealDialog({
 
           <div className="flex justify-end">
             <Button type="submit" disabled={closeMutation.isPending}>
-              {closeMutation.isPending ? 'Closing...' : 'Partial close'}
+              {closeMutation.isPending ? 'Закрываем...' : 'Частично закрыть'}
             </Button>
           </div>
         </form>
