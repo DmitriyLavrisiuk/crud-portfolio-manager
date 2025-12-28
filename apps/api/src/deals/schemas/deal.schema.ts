@@ -5,6 +5,7 @@ export type DealDocument = HydratedDocument<Deal>
 export type DealDirection = 'LONG' | 'SHORT'
 export type DealStatus = 'OPEN' | 'CLOSED'
 export type ExitLegSource = 'MANUAL' | 'BINANCE'
+export type EntryLegSource = 'MANUAL' | 'BINANCE'
 
 @Schema({ _id: false })
 export class TradeFill {
@@ -90,6 +91,35 @@ export class DealExitLeg {
 
 export const DealExitLegSchema = SchemaFactory.createForClass(DealExitLeg)
 
+@Schema({ _id: false })
+export class DealEntryLeg {
+  @Prop({ required: true, trim: true })
+  qty!: string
+
+  @Prop({ required: true, trim: true })
+  price!: string
+
+  @Prop({ required: true, trim: true })
+  quote!: string
+
+  @Prop({ trim: true })
+  fee?: string
+
+  @Prop({ trim: true })
+  feeAsset?: string
+
+  @Prop({ required: true })
+  openedAt!: Date
+
+  @Prop({ enum: ['MANUAL', 'BINANCE'] })
+  source?: EntryLegSource
+
+  @Prop()
+  orderId?: number
+}
+
+export const DealEntryLegSchema = SchemaFactory.createForClass(DealEntryLeg)
+
 @Schema({ timestamps: true })
 export class Deal {
   @Prop({ type: Types.ObjectId, required: true, index: true })
@@ -113,6 +143,9 @@ export class Deal {
   @Prop({ type: DealLegSchema, required: true })
   entry!: DealLeg
 
+  @Prop({ type: [DealEntryLegSchema] })
+  entryLegs?: DealEntryLeg[]
+
   @Prop({ type: DealLegSchema })
   exit?: DealLeg
 
@@ -130,6 +163,15 @@ export class Deal {
 
   @Prop({ trim: true })
   remainingQty?: string
+
+  @Prop({ trim: true })
+  entryQtyTotal?: string
+
+  @Prop({ trim: true })
+  entryQuoteTotal?: string
+
+  @Prop({ trim: true })
+  entryAvgPrice?: string
 
   @Prop({ trim: true })
   realizedPnl?: string

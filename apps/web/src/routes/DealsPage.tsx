@@ -32,6 +32,7 @@ import CreateDealDialog from '@/components/deals/CreateDealDialog'
 import EditDealDialog from '@/components/deals/EditDealDialog'
 import CloseDealDialog from '@/components/deals/CloseDealDialog'
 import PartialCloseDealDialog from '@/components/deals/PartialCloseDealDialog'
+import AddEntryLegDialog from '@/components/deals/AddEntryLegDialog'
 import DeleteDealDialog from '@/components/deals/DeleteDealDialog'
 import ImportTradesDialog from '@/components/deals/ImportTradesDialog'
 import OpenWithOrderDialog from '@/components/deals/OpenWithOrderDialog'
@@ -78,6 +79,7 @@ export default function DealsPage() {
   const [editing, setEditing] = useState<Deal | null>(null)
   const [closing, setClosing] = useState<Deal | null>(null)
   const [partialClosing, setPartialClosing] = useState<Deal | null>(null)
+  const [addingEntry, setAddingEntry] = useState<Deal | null>(null)
   const [closingWithOrder, setClosingWithOrder] = useState<Deal | null>(null)
   const [deleting, setDeleting] = useState<Deal | null>(null)
   const [importing, setImporting] = useState<{
@@ -146,6 +148,10 @@ export default function DealsPage() {
     setPartialClosing(deal)
   }, [])
 
+  const handleAddEntry = useCallback((deal: Deal) => {
+    setAddingEntry(deal)
+  }, [])
+
   const handleCloseWithOrder = useCallback((deal: Deal) => {
     setClosingWithOrder(deal)
   }, [])
@@ -192,6 +198,12 @@ export default function DealsPage() {
         id: 'entryQuote',
         header: 'Entry Quote',
         cell: ({ row }) => row.original.entry?.quote ?? '-',
+      },
+      {
+        accessorKey: 'entryAvgPrice',
+        header: 'Entry Avg',
+        cell: ({ row }) =>
+          row.original.entryAvgPrice ?? row.original.entry?.price ?? '-',
       },
       {
         accessorKey: 'closedQty',
@@ -247,6 +259,13 @@ export default function DealsPage() {
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => handleAddEntry(row.original)}
+                >
+                  Add entry (DCA)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => handlePartialClose(row.original)}
                 >
                   Partial close
@@ -274,6 +293,7 @@ export default function DealsPage() {
     [
       handleEdit,
       handleClose,
+      handleAddEntry,
       handlePartialClose,
       handleCloseWithOrder,
       handleDelete,
@@ -518,6 +538,12 @@ export default function DealsPage() {
         deal={partialClosing}
         open={Boolean(partialClosing)}
         onOpenChange={(open) => (!open ? setPartialClosing(null) : null)}
+        onSuccess={showNotice}
+      />
+      <AddEntryLegDialog
+        deal={addingEntry}
+        open={Boolean(addingEntry)}
+        onOpenChange={(open) => (!open ? setAddingEntry(null) : null)}
         onSuccess={showNotice}
       />
       {closingWithOrder && (

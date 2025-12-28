@@ -65,6 +65,12 @@ export const partialCloseDealSchema = z.object({
   note: z.string().trim().max(500).optional(),
 })
 
+export const addEntryLegSchema = z.object({
+  openedAt: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
+  entry: legInputSchema,
+  note: z.string().trim().max(500).optional(),
+})
+
 export const listDealsSchema = z.object({
   from: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
   to: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
@@ -152,6 +158,7 @@ export type CreateDealDto = z.infer<typeof createDealSchema>
 export type UpdateDealDto = z.infer<typeof updateDealSchema>
 export type CloseDealDto = z.infer<typeof closeDealSchema>
 export type PartialCloseDealDto = z.infer<typeof partialCloseDealSchema>
+export type AddEntryLegDto = z.infer<typeof addEntryLegSchema>
 export type ListDealsQuery = z.infer<typeof listDealsSchema>
 export type DealsStatsQuery = z.infer<typeof dealsStatsSchema>
 export type OpenDealWithOrderDto = z.infer<typeof openDealWithOrderSchema>

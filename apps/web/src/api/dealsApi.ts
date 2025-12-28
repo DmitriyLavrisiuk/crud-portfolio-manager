@@ -43,6 +43,22 @@ export type PartialCloseDealPayload = {
   note?: string
 }
 
+export type AddEntryLegPayload = {
+  openedAt?: string
+  entry: DealEntryPayload
+  note?: string
+}
+
+export type AddEntryLegResponse = {
+  deal: Deal
+  entryAgg: {
+    qtyTotal: string
+    quoteTotal: string
+    avgPrice: string
+  }
+  remainingQty: string
+}
+
 export type ImportTradesPayload = {
   phase: 'ENTRY' | 'EXIT'
   orderId: number
@@ -143,6 +159,19 @@ export async function partialCloseDeal(
   auth: AuthOptions,
 ) {
   return apiFetch<Deal>(`/deals/${id}/partial-close`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function addEntryLeg(
+  id: string,
+  payload: AddEntryLegPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<AddEntryLegResponse>(`/deals/${id}/add-entry`, {
     method: 'POST',
     body: JSON.stringify(payload),
     accessToken: auth.accessToken,

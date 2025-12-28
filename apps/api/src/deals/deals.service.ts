@@ -21,12 +21,14 @@ import {
   type UpdateDealDto,
   type ImportTradesDto,
   type PartialCloseDealDto,
+  type AddEntryLegDto,
 } from './dto/deals.schemas'
 import {
   Deal,
   type DealDirection,
   type DealDocument,
   type DealExitLeg,
+  type DealEntryLeg,
   type DealLeg,
   type TradeFill,
 } from './schemas/deal.schema'
@@ -64,6 +66,9 @@ export class DealsService {
       entry,
       closedQty: '0',
       remainingQty: entry.qty,
+      entryQtyTotal: entry.qty,
+      entryQuoteTotal: entry.quote,
+      entryAvgPrice: entry.price,
     })
 
     return created.save()
@@ -200,6 +205,8 @@ export class DealsService {
 
     let needsRecalc = false
     const hasExitLegs = Array.isArray(deal.exitLegs) && deal.exitLegs.length > 0
+    const hasEntryLegs =
+      Array.isArray(deal.entryLegs) && deal.entryLegs.length > 0
 
     if (update.symbol) {
       deal.symbol = update.symbol
@@ -238,6 +245,12 @@ export class DealsService {
     }
 
     if (needsRecalc) {
+      if (hasEntryLegs) {
+        this.recalcEntryLegs(deal)
+      } else {
+        this.applyLegacyEntryAgg(deal)
+      }
+
       if (hasExitLegs) {
         this.recalcExitLegs(deal)
       } else if (deal.status === 'CLOSED') {
@@ -313,6 +326,51 @@ export class DealsService {
     }
 
     return deal.save()
+  }
+
+  async addEntryLegForUser(userId: string, id: string, data: AddEntryLegDto) {
+    const deal = await this.dealModel.findOne({ _id: id, userId })
+    if (!deal) {
+      return null
+    }
+
+    if (deal.status === 'CLOSED') {
+      throw new BadRequestException('Deal is already closed')
+    }
+
+    this.ensureEntryQuote(deal)
+    this.applyLegacyEntryAgg(deal)
+    const remainingQty = this.getRemainingQty(deal)
+    if (this.toBig(remainingQty).lte(0)) {
+      throw new BadRequestException('Deal has no remaining qty')
+    }
+
+    const entryLeg = this.buildEntryLeg({
+      qty: data.entry.qty,
+      price: data.entry.price,
+      fee: data.entry.fee,
+      feeAsset: data.entry.feeAsset,
+      openedAt: data.openedAt ?? new Date(),
+      source: 'MANUAL',
+    })
+
+    this.addEntryLeg(deal, entryLeg)
+
+    if (data.note) {
+      this.appendNote(deal, data.note)
+    }
+
+    await deal.save()
+
+    return {
+      deal: this.mapDeal(deal),
+      entryAgg: {
+        qtyTotal: deal.entryQtyTotal ?? deal.entry.qty,
+        quoteTotal: deal.entryQuoteTotal ?? deal.entry.quote,
+        avgPrice: deal.entryAvgPrice ?? deal.entry.price,
+      },
+      remainingQty: deal.remainingQty ?? deal.entry.qty,
+    }
   }
 
   async importTradesForUser(
@@ -509,6 +567,29 @@ export class DealsService {
     return this.toBig(qty).times(this.toBig(price)).toString()
   }
 
+  private buildEntryLeg(input: {
+    qty: string
+    price: string
+    quote?: string
+    fee?: string
+    feeAsset?: string
+    openedAt: Date
+    source?: 'MANUAL' | 'BINANCE'
+    orderId?: number
+  }): DealEntryLeg {
+    const quote = input.quote ?? this.computeQuote(input.qty, input.price)
+    return {
+      qty: input.qty,
+      price: input.price,
+      quote,
+      fee: input.fee,
+      feeAsset: input.feeAsset,
+      openedAt: input.openedAt,
+      source: input.source,
+      orderId: input.orderId,
+    }
+  }
+
   private ensureEntryQuote(deal: DealDocument) {
     if (!deal.entry.quote) {
       deal.entry.quote = this.computeQuote(deal.entry.qty, deal.entry.price)
@@ -540,9 +621,12 @@ export class DealsService {
 
   private addExitLeg(deal: DealDocument, exitLeg: DealExitLeg) {
     this.ensureEntryQuote(deal)
+    this.applyLegacyEntryAgg(deal)
     const { closedQty } = this.calcExitAgg(deal.exitLegs ?? [])
-    const entryAvg = this.calcEntryAvg(deal)
-    const remainingQty = this.toBig(entryAvg.qty).minus(this.toBig(closedQty))
+    const entryAgg = this.getEntryAgg(deal)
+    const remainingQty = this.toBig(entryAgg.qtyTotal).minus(
+      this.toBig(closedQty),
+    )
     const exitQty = this.toBig(exitLeg.qty)
     if (exitQty.lte(0)) {
       throw new BadRequestException('Exit qty must be greater than 0')
@@ -558,15 +642,53 @@ export class DealsService {
     this.recalcExitLegs(deal)
   }
 
-  private calcEntryAvg(deal: DealDocument) {
+  private getEntryAgg(deal: DealDocument) {
     this.ensureEntryQuote(deal)
-    const qty = this.toBig(deal.entry.qty)
-    const quote = this.toBig(deal.entry.quote)
-    const avgPrice = qty.gt(0) ? quote.div(qty) : this.toBig('0')
+    const entryLegs = deal.entryLegs ?? []
+    if (entryLegs.length === 0) {
+      const qty = this.toBig(deal.entry.qty)
+      const quote = this.toBig(deal.entry.quote)
+      const avgPrice = qty.gt(0) ? quote.div(qty) : this.toBig('0')
+      return {
+        qtyTotal: qty.toString(),
+        quoteTotal: quote.toString(),
+        avgPrice: avgPrice.toString(),
+        feeTotal: deal.entry.fee,
+        feeAsset: deal.entry.feeAsset,
+      }
+    }
+
+    let qtyTotal = this.toBig('0')
+    let quoteTotal = this.toBig('0')
+    let feeTotal = this.toBig('0')
+    let feeAsset: string | undefined
+    let mixedFeeAsset = false
+
+    for (const leg of entryLegs) {
+      qtyTotal = qtyTotal.plus(this.toBig(leg.qty))
+      quoteTotal = quoteTotal.plus(this.toBig(leg.quote))
+      feeTotal = feeTotal.plus(this.toBig(leg.fee ?? '0'))
+      if (leg.feeAsset) {
+        if (!feeAsset) {
+          feeAsset = leg.feeAsset
+        } else if (feeAsset !== leg.feeAsset) {
+          mixedFeeAsset = true
+        }
+      }
+    }
+
+    if (mixedFeeAsset) {
+      feeAsset = undefined
+    }
+
+    const avgPrice = qtyTotal.gt(0) ? quoteTotal.div(qtyTotal) : this.toBig('0')
+
     return {
-      qty: qty.toString(),
-      quote: quote.toString(),
+      qtyTotal: qtyTotal.toString(),
+      quoteTotal: quoteTotal.toString(),
       avgPrice: avgPrice.toString(),
+      feeTotal: feeTotal.toString(),
+      feeAsset,
     }
   }
 
@@ -609,10 +731,11 @@ export class DealsService {
       return
     }
 
-    const entryAvg = this.calcEntryAvg(deal)
+    this.applyLegacyEntryAgg(deal)
+    const entryAgg = this.getEntryAgg(deal)
     const aggregate = this.calcExitAgg(exitLegs)
     deal.closedQty = aggregate.closedQty
-    const remainingQty = this.toBig(entryAvg.qty).minus(
+    const remainingQty = this.toBig(entryAgg.qtyTotal).minus(
       this.toBig(aggregate.closedQty),
     )
     deal.remainingQty = remainingQty.toString()
@@ -620,7 +743,7 @@ export class DealsService {
     let realized = this.toBig('0')
     for (const leg of exitLegs) {
       realized = realized.plus(
-        this.toBig(this.calcPartialPnl(deal.direction, entryAvg.avgPrice, leg)),
+        this.toBig(this.calcPartialPnl(deal.direction, entryAgg.avgPrice, leg)),
       )
     }
     deal.realizedPnl = realized.toString()
@@ -649,15 +772,52 @@ export class DealsService {
 
   private applyLegacyRemaining(deal: DealDocument) {
     deal.closedQty = '0'
-    deal.remainingQty = deal.entry.qty
+    deal.remainingQty = deal.entryQtyTotal ?? deal.entry.qty
   }
 
   private getRemainingQty(deal: DealDocument) {
-    const entryAvg = this.calcEntryAvg(deal)
+    const entryAgg = this.getEntryAgg(deal)
     const aggregate = this.calcExitAgg(deal.exitLegs ?? [])
-    return this.toBig(entryAvg.qty)
+    return this.toBig(entryAgg.qtyTotal)
       .minus(this.toBig(aggregate.closedQty))
       .toString()
+  }
+
+  private applyLegacyEntryAgg(deal: DealDocument) {
+    deal.entryQtyTotal = deal.entry.qty
+    deal.entryQuoteTotal = deal.entry.quote
+    deal.entryAvgPrice = deal.entry.price
+  }
+
+  private recalcEntryLegs(deal: DealDocument) {
+    const entryAgg = this.getEntryAgg(deal)
+    deal.entryQtyTotal = entryAgg.qtyTotal
+    deal.entryQuoteTotal = entryAgg.quoteTotal
+    deal.entryAvgPrice = entryAgg.avgPrice
+    deal.entry.qty = entryAgg.qtyTotal
+    deal.entry.quote = entryAgg.quoteTotal
+    deal.entry.price = entryAgg.avgPrice
+  }
+
+  private addEntryLeg(deal: DealDocument, entryLeg: DealEntryLeg) {
+    if (!deal.entryLegs || deal.entryLegs.length === 0) {
+      deal.entryLegs = []
+      if (deal.entry.qty && deal.entry.price && deal.entry.quote) {
+        const legacyLeg = this.buildEntryLeg({
+          qty: deal.entry.qty,
+          price: deal.entry.price,
+          quote: deal.entry.quote,
+          fee: deal.entry.fee,
+          feeAsset: deal.entry.feeAsset,
+          openedAt: deal.openedAt ?? new Date(),
+          source: 'MANUAL',
+        })
+        deal.entryLegs.push(legacyLeg)
+      }
+    }
+    deal.entryLegs.push(entryLeg)
+    this.recalcEntryLegs(deal)
+    this.recalcExitLegs(deal)
   }
 
   private buildMarketOrderPayload(
@@ -762,11 +922,19 @@ export class DealsService {
         deal.exit.fee,
       )
     }
-    if (phase === 'ENTRY' && hasExitLegs) {
-      this.recalcExitLegs(deal)
-    }
-    if (phase === 'ENTRY' && !hasExitLegs) {
-      this.applyLegacyRemaining(deal)
+    if (phase === 'ENTRY') {
+      const hasEntryLegs =
+        Array.isArray(deal.entryLegs) && deal.entryLegs.length > 0
+      if (hasEntryLegs) {
+        this.recalcEntryLegs(deal)
+      } else {
+        this.applyLegacyEntryAgg(deal)
+      }
+      if (hasExitLegs) {
+        this.recalcExitLegs(deal)
+      } else {
+        this.applyLegacyRemaining(deal)
+      }
     }
 
     const leg = phase === 'ENTRY' ? deal.entry : deal.exit

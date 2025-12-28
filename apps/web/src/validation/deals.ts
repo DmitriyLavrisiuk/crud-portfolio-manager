@@ -76,6 +76,12 @@ export const partialCloseDealSchema = z.object({
   note: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
 })
 
+export const addEntryLegSchema = z.object({
+  openedAt: z.preprocess(emptyToUndefined, dateStringSchema.optional()),
+  entry: entrySchema,
+  note: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
+})
+
 export const openWithOrderSchema = z
   .object({
     symbol: symbolSchema,
@@ -173,5 +179,6 @@ export type CreateDealFormValues = z.infer<typeof createDealSchema>
 export type EditDealFormValues = z.infer<typeof editDealSchema>
 export type CloseDealFormValues = z.infer<typeof closeDealSchema>
 export type PartialCloseDealFormValues = z.infer<typeof partialCloseDealSchema>
+export type AddEntryLegFormValues = z.infer<typeof addEntryLegSchema>
 export type OpenWithOrderFormValues = z.infer<typeof openWithOrderSchema>
 export type CloseWithOrderFormValues = z.infer<typeof closeWithOrderSchema>

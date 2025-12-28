@@ -20,12 +20,14 @@ import {
   closeDealSchema,
   closeDealWithOrderSchema,
   createDealSchema,
+  addEntryLegSchema,
   dealsStatsSchema,
   importTradesSchema,
   listDealsSchema,
   openDealWithOrderSchema,
   partialCloseDealSchema,
   updateDealSchema,
+  type AddEntryLegDto,
   type CloseDealDto,
   type CloseDealWithOrderDto,
   type CreateDealDto,
@@ -123,6 +125,22 @@ export class DealsController {
     }
 
     return this.mapDeal(closed)
+  }
+
+  @Post(':id/add-entry')
+  async addEntryLeg(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(addEntryLegSchema))
+    body: AddEntryLegDto,
+  ) {
+    const user = req.user as { id: string }
+    const result = await this.dealsService.addEntryLegForUser(user.id, id, body)
+    if (!result) {
+      throw new NotFoundException('Deal not found')
+    }
+
+    return result
   }
 
   @Post(':id/partial-close')
