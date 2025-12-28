@@ -1,4 +1,4 @@
-# CRUD Portfolio Manager (v0.7.2-2)
+# CRUD Portfolio Manager (v0.7.2-3)
 
 Monorepo scaffold with a Vite + React web app and a NestJS API.
 
@@ -109,6 +109,7 @@ pnpm dev
 - Add entry leg: `POST http://localhost:4000/deals/:id/add-entry`
 - Close: `POST http://localhost:4000/deals/:id/close`
 - Partial close: `POST http://localhost:4000/deals/:id/partial-close`
+- Profit to position: `POST http://localhost:4000/deals/:id/profit-to-position`
 - Close with order: `POST http://localhost:4000/deals/:id/close-with-order`
 - Import trades: `POST http://localhost:4000/deals/:id/import-trades`
 - Delete: `DELETE http://localhost:4000/deals/:id`
@@ -138,6 +139,8 @@ pnpm dev
   - Partial close deals with exit legs, remaining qty tracking, and realized PnL updates.
 - v0.7.2-2
   - DCA entry legs with avg entry price and aggregate tracking.
+- v0.7.2-3
+  - Reinvest realized profit into position via profit-to-position operations.
 
 ## Troubleshooting
 

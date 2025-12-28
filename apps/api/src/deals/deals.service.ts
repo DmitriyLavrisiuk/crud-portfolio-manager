@@ -22,6 +22,7 @@ import {
   type ImportTradesDto,
   type PartialCloseDealDto,
   type AddEntryLegDto,
+  type ProfitToPositionDto,
 } from './dto/deals.schemas'
 import {
   Deal,
@@ -31,6 +32,7 @@ import {
   type DealEntryLeg,
   type DealLeg,
   type TradeFill,
+  type DealProfitOp,
 } from './schemas/deal.schema'
 
 type TradesAggregate = {
@@ -69,6 +71,8 @@ export class DealsService {
       entryQtyTotal: entry.qty,
       entryQuoteTotal: entry.quote,
       entryAvgPrice: entry.price,
+      profitSpentTotal: '0',
+      realizedPnlAvailable: '0',
     })
 
     return created.save()
@@ -264,6 +268,7 @@ export class DealsService {
           deal.entry.fee,
           deal.exit.fee,
         )
+        this.updateRealizedAvailable(deal)
       } else {
         this.applyLegacyRemaining(deal)
       }
@@ -326,6 +331,81 @@ export class DealsService {
     }
 
     return deal.save()
+  }
+
+  async profitToPositionForUser(
+    userId: string,
+    id: string,
+    data: ProfitToPositionDto,
+  ) {
+    const deal = await this.dealModel.findOne({ _id: id, userId })
+    if (!deal) {
+      return null
+    }
+
+    this.ensureEntryQuote(deal)
+    this.applyLegacyEntryAgg(deal)
+    const remainingQty = this.getRemainingQty(deal)
+    if (this.toBig(remainingQty).lte(0)) {
+      throw new BadRequestException('Deal is fully closed')
+    }
+
+    const realizedAvailable = this.getRealizedAvailable(deal)
+    if (this.toBig(deal.realizedPnl ?? '0').lte(0)) {
+      throw new BadRequestException('Realized PnL is not positive')
+    }
+    if (realizedAvailable.lte(0)) {
+      throw new BadRequestException('No available profit')
+    }
+
+    const amount = this.toBig(data.amount)
+    if (amount.gt(realizedAvailable)) {
+      throw new BadRequestException('Amount exceeds available profit')
+    }
+
+    const price = this.toBig(data.price)
+    if (price.lte(0)) {
+      throw new BadRequestException('Price must be greater than 0')
+    }
+
+    const qty = amount.div(price).toString()
+    const entryLeg = this.buildEntryLeg({
+      qty,
+      price: data.price,
+      quote: data.amount,
+      openedAt: data.at ?? new Date(),
+      source: 'MANUAL',
+    })
+
+    this.addEntryLeg(deal, entryLeg, { preserveRealizedPnl: true })
+
+    if (!deal.profitOps) {
+      deal.profitOps = []
+    }
+    const profitOp: DealProfitOp = {
+      at: data.at ?? new Date(),
+      amount: data.amount,
+      price: data.price,
+      qty,
+      note: data.note,
+    }
+    deal.profitOps.push(profitOp)
+
+    const nextSpent = this.toBig(deal.profitSpentTotal ?? '0').plus(amount)
+    deal.profitSpentTotal = nextSpent.toString()
+    this.updateRealizedAvailable(deal)
+
+    await deal.save()
+
+    return {
+      deal: this.mapDeal(deal),
+      realizedAvailableAfter: deal.realizedPnlAvailable ?? '0',
+      newEntryAgg: {
+        qtyTotal: deal.entryQtyTotal ?? deal.entry.qty,
+        quoteTotal: deal.entryQuoteTotal ?? deal.entry.quote,
+        avgPrice: deal.entryAvgPrice ?? deal.entry.price,
+      },
+    }
   }
 
   async addEntryLegForUser(userId: string, id: string, data: AddEntryLegDto) {
@@ -724,7 +804,10 @@ export class DealsService {
     return pnl.toString()
   }
 
-  private recalcExitLegs(deal: DealDocument) {
+  private recalcExitLegs(
+    deal: DealDocument,
+    options: { preserveRealizedPnl?: boolean } = {},
+  ) {
     const exitLegs = deal.exitLegs ?? []
     if (exitLegs.length === 0) {
       this.applyLegacyRemaining(deal)
@@ -740,13 +823,18 @@ export class DealsService {
     )
     deal.remainingQty = remainingQty.toString()
 
-    let realized = this.toBig('0')
-    for (const leg of exitLegs) {
-      realized = realized.plus(
-        this.toBig(this.calcPartialPnl(deal.direction, entryAgg.avgPrice, leg)),
-      )
+    if (!options.preserveRealizedPnl) {
+      let realized = this.toBig('0')
+      for (const leg of exitLegs) {
+        realized = realized.plus(
+          this.toBig(
+            this.calcPartialPnl(deal.direction, entryAgg.avgPrice, leg),
+          ),
+        )
+      }
+      deal.realizedPnl = realized.toString()
     }
-    deal.realizedPnl = realized.toString()
+    this.updateRealizedAvailable(deal)
 
     if (remainingQty.eq(0)) {
       deal.status = 'CLOSED'
@@ -799,7 +887,11 @@ export class DealsService {
     deal.entry.price = entryAgg.avgPrice
   }
 
-  private addEntryLeg(deal: DealDocument, entryLeg: DealEntryLeg) {
+  private addEntryLeg(
+    deal: DealDocument,
+    entryLeg: DealEntryLeg,
+    options: { preserveRealizedPnl?: boolean } = {},
+  ) {
     if (!deal.entryLegs || deal.entryLegs.length === 0) {
       deal.entryLegs = []
       if (deal.entry.qty && deal.entry.price && deal.entry.quote) {
@@ -817,7 +909,18 @@ export class DealsService {
     }
     deal.entryLegs.push(entryLeg)
     this.recalcEntryLegs(deal)
-    this.recalcExitLegs(deal)
+    this.recalcExitLegs(deal, options)
+  }
+
+  private getRealizedAvailable(deal: DealDocument) {
+    const realized = this.toBig(deal.realizedPnl ?? '0')
+    const spent = this.toBig(deal.profitSpentTotal ?? '0')
+    return realized.minus(spent)
+  }
+
+  private updateRealizedAvailable(deal: DealDocument) {
+    const available = this.getRealizedAvailable(deal)
+    deal.realizedPnlAvailable = available.toString()
   }
 
   private buildMarketOrderPayload(
@@ -921,6 +1024,7 @@ export class DealsService {
         deal.entry.fee,
         deal.exit.fee,
       )
+      this.updateRealizedAvailable(deal)
     }
     if (phase === 'ENTRY') {
       const hasEntryLegs =

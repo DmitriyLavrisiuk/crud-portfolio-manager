@@ -15,6 +15,14 @@ export type DealEntryLeg = DealLeg & {
   orderId?: number
 }
 
+export type DealProfitOp = {
+  at: string
+  amount: string
+  price: string
+  qty: string
+  note?: string
+}
+
 export type DealExitLeg = DealLeg & {
   closedAt: string
   source?: 'MANUAL' | 'BINANCE'
@@ -66,6 +74,9 @@ export type Deal = {
   entryQtyTotal?: string
   entryQuoteTotal?: string
   entryAvgPrice?: string
+  profitOps?: DealProfitOp[]
+  profitSpentTotal?: string
+  realizedPnlAvailable?: string
   realizedPnl?: string
   note?: string
   createdAt?: string

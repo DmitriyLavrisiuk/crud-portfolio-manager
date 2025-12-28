@@ -82,6 +82,13 @@ export const addEntryLegSchema = z.object({
   note: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
 })
 
+export const profitToPositionSchema = z.object({
+  amount: positiveDecimalStringSchema,
+  price: positiveDecimalStringSchema,
+  at: z.preprocess(emptyToUndefined, dateStringSchema.optional()),
+  note: z.preprocess(emptyToUndefined, z.string().trim().max(200).optional()),
+})
+
 export const openWithOrderSchema = z
   .object({
     symbol: symbolSchema,
@@ -180,5 +187,6 @@ export type EditDealFormValues = z.infer<typeof editDealSchema>
 export type CloseDealFormValues = z.infer<typeof closeDealSchema>
 export type PartialCloseDealFormValues = z.infer<typeof partialCloseDealSchema>
 export type AddEntryLegFormValues = z.infer<typeof addEntryLegSchema>
+export type ProfitToPositionFormValues = z.infer<typeof profitToPositionSchema>
 export type OpenWithOrderFormValues = z.infer<typeof openWithOrderSchema>
 export type CloseWithOrderFormValues = z.infer<typeof closeWithOrderSchema>

@@ -120,6 +120,26 @@ export class DealEntryLeg {
 
 export const DealEntryLegSchema = SchemaFactory.createForClass(DealEntryLeg)
 
+@Schema({ _id: false })
+export class DealProfitOp {
+  @Prop({ required: true })
+  at!: Date
+
+  @Prop({ required: true, trim: true })
+  amount!: string
+
+  @Prop({ required: true, trim: true })
+  price!: string
+
+  @Prop({ required: true, trim: true })
+  qty!: string
+
+  @Prop({ trim: true, maxlength: 200 })
+  note?: string
+}
+
+export const DealProfitOpSchema = SchemaFactory.createForClass(DealProfitOp)
+
 @Schema({ timestamps: true })
 export class Deal {
   @Prop({ type: Types.ObjectId, required: true, index: true })
@@ -172,6 +192,15 @@ export class Deal {
 
   @Prop({ trim: true })
   entryAvgPrice?: string
+
+  @Prop({ type: [DealProfitOpSchema] })
+  profitOps?: DealProfitOp[]
+
+  @Prop({ trim: true })
+  profitSpentTotal?: string
+
+  @Prop({ trim: true })
+  realizedPnlAvailable?: string
 
   @Prop({ trim: true })
   realizedPnl?: string

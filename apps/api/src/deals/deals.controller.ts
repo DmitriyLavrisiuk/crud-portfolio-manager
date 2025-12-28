@@ -26,6 +26,7 @@ import {
   listDealsSchema,
   openDealWithOrderSchema,
   partialCloseDealSchema,
+  profitToPositionSchema,
   updateDealSchema,
   type AddEntryLegDto,
   type CloseDealDto,
@@ -36,6 +37,7 @@ import {
   type ListDealsQuery,
   type OpenDealWithOrderDto,
   type PartialCloseDealDto,
+  type ProfitToPositionDto,
   type UpdateDealDto,
 } from './dto/deals.schemas'
 import type { Deal } from './schemas/deal.schema'
@@ -161,6 +163,26 @@ export class DealsController {
     }
 
     return this.mapDeal(updated)
+  }
+
+  @Post(':id/profit-to-position')
+  async profitToPosition(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(profitToPositionSchema))
+    body: ProfitToPositionDto,
+  ) {
+    const user = req.user as { id: string }
+    const result = await this.dealsService.profitToPositionForUser(
+      user.id,
+      id,
+      body,
+    )
+    if (!result) {
+      throw new NotFoundException('Deal not found')
+    }
+
+    return result
   }
 
   @Post('open-with-order')

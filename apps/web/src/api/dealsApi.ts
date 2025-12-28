@@ -59,6 +59,23 @@ export type AddEntryLegResponse = {
   remainingQty: string
 }
 
+export type ProfitToPositionPayload = {
+  amount: string
+  price: string
+  at?: string
+  note?: string
+}
+
+export type ProfitToPositionResponse = {
+  deal: Deal
+  realizedAvailableAfter: string
+  newEntryAgg: {
+    qtyTotal: string
+    quoteTotal: string
+    avgPrice: string
+  }
+}
+
 export type ImportTradesPayload = {
   phase: 'ENTRY' | 'EXIT'
   orderId: number
@@ -172,6 +189,19 @@ export async function addEntryLeg(
   auth: AuthOptions,
 ) {
   return apiFetch<AddEntryLegResponse>(`/deals/${id}/add-entry`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function profitToPosition(
+  id: string,
+  payload: ProfitToPositionPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<ProfitToPositionResponse>(`/deals/${id}/profit-to-position`, {
     method: 'POST',
     body: JSON.stringify(payload),
     accessToken: auth.accessToken,

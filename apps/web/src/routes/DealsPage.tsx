@@ -33,6 +33,7 @@ import EditDealDialog from '@/components/deals/EditDealDialog'
 import CloseDealDialog from '@/components/deals/CloseDealDialog'
 import PartialCloseDealDialog from '@/components/deals/PartialCloseDealDialog'
 import AddEntryLegDialog from '@/components/deals/AddEntryLegDialog'
+import ProfitToPositionDialog from '@/components/deals/ProfitToPositionDialog'
 import DeleteDealDialog from '@/components/deals/DeleteDealDialog'
 import ImportTradesDialog from '@/components/deals/ImportTradesDialog'
 import OpenWithOrderDialog from '@/components/deals/OpenWithOrderDialog'
@@ -80,6 +81,7 @@ export default function DealsPage() {
   const [closing, setClosing] = useState<Deal | null>(null)
   const [partialClosing, setPartialClosing] = useState<Deal | null>(null)
   const [addingEntry, setAddingEntry] = useState<Deal | null>(null)
+  const [profitToPosition, setProfitToPosition] = useState<Deal | null>(null)
   const [closingWithOrder, setClosingWithOrder] = useState<Deal | null>(null)
   const [deleting, setDeleting] = useState<Deal | null>(null)
   const [importing, setImporting] = useState<{
@@ -150,6 +152,10 @@ export default function DealsPage() {
 
   const handleAddEntry = useCallback((deal: Deal) => {
     setAddingEntry(deal)
+  }, [])
+
+  const handleProfitToPosition = useCallback((deal: Deal) => {
+    setProfitToPosition(deal)
   }, [])
 
   const handleCloseWithOrder = useCallback((deal: Deal) => {
@@ -226,6 +232,22 @@ export default function DealsPage() {
         cell: ({ row }) => row.original.realizedPnl ?? '-',
       },
       {
+        accessorKey: 'realizedPnlAvailable',
+        header: 'Avail PnL',
+        cell: ({ row }) => {
+          const deal = row.original
+          if (deal.realizedPnlAvailable !== undefined) {
+            return deal.realizedPnlAvailable
+          }
+          if (deal.realizedPnl && deal.profitSpentTotal) {
+            const value =
+              Number(deal.realizedPnl) - Number(deal.profitSpentTotal)
+            return Number.isFinite(value) ? value.toString() : '-'
+          }
+          return deal.realizedPnl ?? '-'
+        },
+      },
+      {
         id: 'actions',
         header: 'Actions',
         cell: ({ row }) => (
@@ -266,6 +288,13 @@ export default function DealsPage() {
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => handleProfitToPosition(row.original)}
+                >
+                  Profit to position
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => handlePartialClose(row.original)}
                 >
                   Partial close
@@ -294,6 +323,7 @@ export default function DealsPage() {
       handleEdit,
       handleClose,
       handleAddEntry,
+      handleProfitToPosition,
       handlePartialClose,
       handleCloseWithOrder,
       handleDelete,
@@ -544,6 +574,12 @@ export default function DealsPage() {
         deal={addingEntry}
         open={Boolean(addingEntry)}
         onOpenChange={(open) => (!open ? setAddingEntry(null) : null)}
+        onSuccess={showNotice}
+      />
+      <ProfitToPositionDialog
+        deal={profitToPosition}
+        open={Boolean(profitToPosition)}
+        onOpenChange={(open) => (!open ? setProfitToPosition(null) : null)}
         onSuccess={showNotice}
       />
       {closingWithOrder && (
