@@ -980,43 +980,73 @@ export default function DealsPage() {
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+              <div className="inline-flex flex-wrap rounded-md border border-input">
                 <Button
                   type="button"
-                  variant={activePreset === '1w' ? 'secondary' : 'outline'}
+                  variant="ghost"
                   size="sm"
+                  className={cn(
+                    'h-8 rounded-none px-3 text-xs',
+                    activePreset === '1w'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
                   onClick={() => applyPreset('1w')}
                 >
                   1 неделя
                 </Button>
                 <Button
                   type="button"
-                  variant={activePreset === '1m' ? 'secondary' : 'outline'}
+                  variant="ghost"
                   size="sm"
+                  className={cn(
+                    'h-8 rounded-none border-l border-border px-3 text-xs',
+                    activePreset === '1m'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
                   onClick={() => applyPreset('1m')}
                 >
                   1 месяц
                 </Button>
                 <Button
                   type="button"
-                  variant={activePreset === '3m' ? 'secondary' : 'outline'}
+                  variant="ghost"
                   size="sm"
+                  className={cn(
+                    'h-8 rounded-none border-l border-border px-3 text-xs',
+                    activePreset === '3m'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
                   onClick={() => applyPreset('3m')}
                 >
                   3 месяца
                 </Button>
                 <Button
                   type="button"
-                  variant={activePreset === '6m' ? 'secondary' : 'outline'}
+                  variant="ghost"
                   size="sm"
+                  className={cn(
+                    'h-8 rounded-none border-l border-border px-3 text-xs',
+                    activePreset === '6m'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
                   onClick={() => applyPreset('6m')}
                 >
                   6 месяцев
                 </Button>
                 <Button
                   type="button"
-                  variant={activePreset === 'all' ? 'secondary' : 'outline'}
+                  variant="ghost"
                   size="sm"
+                  className={cn(
+                    'h-8 rounded-none border-l border-border px-3 text-xs',
+                    activePreset === 'all'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
                   onClick={() => applyPreset('all')}
                 >
                   Все время
