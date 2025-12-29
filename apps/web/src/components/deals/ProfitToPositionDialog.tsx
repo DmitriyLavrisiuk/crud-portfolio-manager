@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '@/auth/AuthProvider'
 import { profitToPosition } from '@/api/dealsApi'
+import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,6 +15,14 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
+import { fromLocalDateIso, toLocalDateIso } from '@/lib/dateLocal'
 import { type Deal } from '@/types/deals'
 import {
   formatMoneyDisplay,
@@ -50,7 +59,7 @@ export default function ProfitToPositionDialog({
     defaultValues: {
       amount: '',
       price: '',
-      at: new Date().toISOString().slice(0, 10),
+      at: toLocalDateIso(new Date()),
       note: '',
     },
   })
@@ -60,7 +69,7 @@ export default function ProfitToPositionDialog({
     form.reset({
       amount: '',
       price: '',
-      at: new Date().toISOString().slice(0, 10),
+      at: toLocalDateIso(new Date()),
       note: '',
     })
   }, [open, form])
@@ -78,7 +87,7 @@ export default function ProfitToPositionDialog({
       const payload = {
         amount: values.amount,
         price: values.price,
-        at: values.at ? new Date(values.at).toISOString() : undefined,
+        at: values.at ? toLocalDateIso(fromLocalDateIso(values.at)) : undefined,
         note: values.note?.trim() || undefined,
       }
       return profitToPosition(deal.id, payload, {
@@ -154,7 +163,39 @@ export default function ProfitToPositionDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="profit-at">Дата</Label>
-              <Input id="profit-at" type="date" {...form.register('at')} />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'justify-start text-left font-normal',
+                      !form.watch('at') && 'text-muted-foreground',
+                    )}
+                  >
+                    {form.watch('at')
+                      ? format(fromLocalDateIso(form.watch('at')), 'dd.MM.yyyy')
+                      : 'Выберите дату'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={
+                      form.watch('at')
+                        ? fromLocalDateIso(form.watch('at'))
+                        : undefined
+                    }
+                    onSelect={(date: Date | undefined) =>
+                      form.setValue(
+                        'at',
+                        date ? toLocalDateIso(date) : form.getValues('at'),
+                        { shouldValidate: true, shouldDirty: true },
+                      )
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
               {form.formState.errors.at && (
                 <p className="text-sm text-destructive">
                   {form.formState.errors.at.message}

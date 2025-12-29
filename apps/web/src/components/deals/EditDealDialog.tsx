@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '@/auth/AuthProvider'
 import { updateDeal } from '@/api/dealsApi'
+import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,6 +15,12 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -21,6 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
+import { fromLocalDateIso, toLocalDateIso } from '@/lib/dateLocal'
 import { formatInputValue } from '@/lib/format'
 import { toastError } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
@@ -33,11 +42,9 @@ type EditDealDialogProps = {
   onSuccess?: (message: string) => void
 }
 
-function formatDateInput(value?: string) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toISOString().slice(0, 10)
+const formatDateLabel = (value?: string) => {
+  if (!value) return 'Выберите дату'
+  return format(fromLocalDateIso(value), 'dd.MM.yyyy')
 }
 
 export default function EditDealDialog({
@@ -70,7 +77,7 @@ export default function EditDealDialog({
     form.reset({
       symbol: deal.symbol,
       direction: deal.direction,
-      openedAt: formatDateInput(deal.openedAt),
+      openedAt: deal.openedAt || toLocalDateIso(new Date()),
       entry: {
         qty: formatInputValue(deal.entry.qty, 'qty'),
         price: formatInputValue(deal.entry.price, 'price'),
@@ -89,7 +96,7 @@ export default function EditDealDialog({
       const payload = {
         symbol: values.symbol.trim().toUpperCase(),
         direction: values.direction,
-        openedAt: new Date(values.openedAt).toISOString(),
+        openedAt: toLocalDateIso(fromLocalDateIso(values.openedAt)),
         note: values.note?.trim() || undefined,
         entry: {
           qty: values.entry.qty,
@@ -130,102 +137,143 @@ export default function EditDealDialog({
             updateMutation.mutate(values),
           )}
         >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="edit-deal-symbol">Символ</Label>
-              <Input id="edit-deal-symbol" {...form.register('symbol')} />
-              {form.formState.errors.symbol && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.symbol.message}
-                </p>
-              )}
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-deal-symbol">Символ</Label>
+                <Input id="edit-deal-symbol" {...form.register('symbol')} />
+                {form.formState.errors.symbol && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.symbol.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-deal-direction">Направление</Label>
+                <Select
+                  value={form.watch('direction')}
+                  onValueChange={(value) =>
+                    form.setValue(
+                      'direction',
+                      value as EditDealFormValues['direction'],
+                    )
+                  }
+                >
+                  <SelectTrigger id="edit-deal-direction">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LONG">LONG</SelectItem>
+                    <SelectItem value="SHORT">SHORT</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Дата открытия</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'justify-start text-left font-normal',
+                        !form.watch('openedAt') && 'text-muted-foreground',
+                      )}
+                    >
+                      {formatDateLabel(form.watch('openedAt'))}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={
+                        form.watch('openedAt')
+                          ? fromLocalDateIso(form.watch('openedAt'))
+                          : undefined
+                      }
+                      onSelect={(date: Date | undefined) =>
+                        form.setValue(
+                          'openedAt',
+                          date
+                            ? toLocalDateIso(date)
+                            : form.getValues('openedAt'),
+                          { shouldValidate: true, shouldDirty: true },
+                        )
+                      }
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                {form.formState.errors.openedAt && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.openedAt.message}
+                  </p>
+                )}
+              </div>
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="edit-deal-direction">Направление</Label>
-              <Select
-                value={form.watch('direction')}
-                onValueChange={(value) =>
-                  form.setValue(
-                    'direction',
-                    value as EditDealFormValues['direction'],
-                  )
-                }
-              >
-                <SelectTrigger id="edit-deal-direction">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LONG">LONG</SelectItem>
-                  <SelectItem value="SHORT">SHORT</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-deal-opened-at">Дата открытия</Label>
-              <Input
-                id="edit-deal-opened-at"
-                type="date"
-                {...form.register('openedAt')}
-              />
-              {form.formState.errors.openedAt && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.openedAt.message}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-deal-entry-qty">Объем входа (qty)</Label>
-              <Input
-                id="edit-deal-entry-qty"
-                inputMode="decimal"
-                {...form.register('entry.qty')}
-              />
-              {form.formState.errors.entry?.qty && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.entry.qty.message}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Количество в базовой валюте.
+              <p className="text-xs font-semibold text-muted-foreground">
+                Вход
               </p>
+              <div className="grid gap-2 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-deal-entry-qty">Объем входа (qty)</Label>
+                  <Input
+                    id="edit-deal-entry-qty"
+                    inputMode="decimal"
+                    {...form.register('entry.qty')}
+                  />
+                  {form.formState.errors.entry?.qty && (
+                    <p className="text-sm text-destructive">
+                      {form.formState.errors.entry.qty.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Количество в базовой валюте.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-deal-entry-price">Цена входа</Label>
+                  <Input
+                    id="edit-deal-entry-price"
+                    inputMode="decimal"
+                    {...form.register('entry.price')}
+                  />
+                  {form.formState.errors.entry?.price && (
+                    <p className="text-sm text-destructive">
+                      {form.formState.errors.entry.price.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Цена в котируемой валюте (обычно USDT).
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-2 md:grid-cols-[1fr_140px]">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-deal-entry-fee">Комиссия входа</Label>
+                  <Input
+                    id="edit-deal-entry-fee"
+                    inputMode="decimal"
+                    {...form.register('entry.fee')}
+                  />
+                  {form.formState.errors.entry?.fee && (
+                    <p className="text-sm text-destructive">
+                      {form.formState.errors.entry.fee.message}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-deal-entry-fee-asset">Актив</Label>
+                  <Input
+                    id="edit-deal-entry-fee-asset"
+                    {...form.register('entry.feeAsset')}
+                  />
+                </div>
+              </div>
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="edit-deal-entry-price">Цена входа</Label>
-              <Input
-                id="edit-deal-entry-price"
-                inputMode="decimal"
-                {...form.register('entry.price')}
-              />
-              {form.formState.errors.entry?.price && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.entry.price.message}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Цена в котируемой валюте (обычно USDT).
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-deal-entry-fee">Комиссия входа</Label>
-              <Input
-                id="edit-deal-entry-fee"
-                inputMode="decimal"
-                {...form.register('entry.fee')}
-              />
-              {form.formState.errors.entry?.fee && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.entry.fee.message}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-deal-entry-fee-asset">Актив комиссии</Label>
-              <Input
-                id="edit-deal-entry-fee-asset"
-                {...form.register('entry.feeAsset')}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="edit-deal-note">Заметка</Label>
               <Input id="edit-deal-note" {...form.register('note')} />
               {form.formState.errors.note && (

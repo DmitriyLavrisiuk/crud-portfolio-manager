@@ -71,13 +71,13 @@ export const closeDealSchema = z.object({
 })
 
 export const partialCloseDealSchema = z.object({
-  closedAt: z.preprocess(emptyToUndefined, dateStringSchema.optional()),
+  closedAt: dateStringSchema,
   exit: exitSchema,
   note: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
 })
 
 export const addEntryLegSchema = z.object({
-  openedAt: z.preprocess(emptyToUndefined, dateStringSchema.optional()),
+  openedAt: dateStringSchema,
   entry: entrySchema,
   note: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
 })
@@ -85,7 +85,7 @@ export const addEntryLegSchema = z.object({
 export const profitToPositionSchema = z.object({
   amount: positiveDecimalStringSchema,
   price: positiveDecimalStringSchema,
-  at: z.preprocess(emptyToUndefined, dateStringSchema.optional()),
+  at: dateStringSchema,
   note: z.preprocess(emptyToUndefined, z.string().trim().max(200).optional()),
 })
 

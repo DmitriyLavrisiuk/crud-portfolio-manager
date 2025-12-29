@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '@/auth/AuthProvider'
 import { addEntryLeg } from '@/api/dealsApi'
+import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,6 +15,14 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
+import { fromLocalDateIso, toLocalDateIso } from '@/lib/dateLocal'
 import { toastError } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
 import {
@@ -40,7 +49,7 @@ export default function AddEntryLegDialog({
   const form = useForm<AddEntryLegFormValues>({
     resolver: zodResolver(addEntryLegSchema),
     defaultValues: {
-      openedAt: new Date().toISOString().slice(0, 10),
+      openedAt: toLocalDateIso(new Date()),
       entry: {
         qty: '',
         price: '',
@@ -54,7 +63,7 @@ export default function AddEntryLegDialog({
   useEffect(() => {
     if (!open) return
     form.reset({
-      openedAt: new Date().toISOString().slice(0, 10),
+      openedAt: toLocalDateIso(new Date()),
       entry: {
         qty: '',
         price: '',
@@ -72,7 +81,7 @@ export default function AddEntryLegDialog({
       }
       const payload = {
         openedAt: values.openedAt
-          ? new Date(values.openedAt).toISOString()
+          ? toLocalDateIso(fromLocalDateIso(values.openedAt))
           : undefined,
         entry: {
           qty: values.entry.qty,
@@ -112,73 +121,117 @@ export default function AddEntryLegDialog({
           className="space-y-4"
           onSubmit={form.handleSubmit((values) => addMutation.mutate(values))}
         >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="add-entry-date">Дата входа</Label>
-              <Input
-                id="add-entry-date"
-                type="date"
-                {...form.register('openedAt')}
-              />
-              {form.formState.errors.openedAt && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.openedAt.message}
-                </p>
-              )}
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Дата входа</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'justify-start text-left font-normal',
+                        !form.watch('openedAt') && 'text-muted-foreground',
+                      )}
+                    >
+                      {form.watch('openedAt')
+                        ? format(
+                            fromLocalDateIso(form.watch('openedAt')),
+                            'dd.MM.yyyy',
+                          )
+                        : 'Выберите дату'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={
+                        form.watch('openedAt')
+                          ? fromLocalDateIso(form.watch('openedAt'))
+                          : undefined
+                      }
+                      onSelect={(date: Date | undefined) =>
+                        form.setValue(
+                          'openedAt',
+                          date
+                            ? toLocalDateIso(date)
+                            : form.getValues('openedAt'),
+                          { shouldValidate: true, shouldDirty: true },
+                        )
+                      }
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                {form.formState.errors.openedAt && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.openedAt.message}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add-entry-qty">Объем входа (qty)</Label>
-              <Input
-                id="add-entry-qty"
-                inputMode="decimal"
-                {...form.register('entry.qty')}
-              />
-              {form.formState.errors.entry?.qty && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.entry.qty.message}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Количество в базовой валюте.
+              <p className="text-xs font-semibold text-muted-foreground">
+                Вход
               </p>
+              <div className="grid gap-2 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="add-entry-qty">Объем входа (qty)</Label>
+                  <Input
+                    id="add-entry-qty"
+                    inputMode="decimal"
+                    {...form.register('entry.qty')}
+                  />
+                  {form.formState.errors.entry?.qty && (
+                    <p className="text-sm text-destructive">
+                      {form.formState.errors.entry.qty.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Количество в базовой валюте.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add-entry-price">Цена входа</Label>
+                  <Input
+                    id="add-entry-price"
+                    inputMode="decimal"
+                    {...form.register('entry.price')}
+                  />
+                  {form.formState.errors.entry?.price && (
+                    <p className="text-sm text-destructive">
+                      {form.formState.errors.entry.price.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Цена в котируемой валюте (обычно USDT).
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-2 md:grid-cols-[1fr_140px]">
+                <div className="space-y-2">
+                  <Label htmlFor="add-entry-fee">Комиссия входа</Label>
+                  <Input
+                    id="add-entry-fee"
+                    inputMode="decimal"
+                    {...form.register('entry.fee')}
+                  />
+                  {form.formState.errors.entry?.fee && (
+                    <p className="text-sm text-destructive">
+                      {form.formState.errors.entry.fee.message}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add-entry-fee-asset">Актив</Label>
+                  <Input
+                    id="add-entry-fee-asset"
+                    {...form.register('entry.feeAsset')}
+                  />
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add-entry-price">Цена входа</Label>
-              <Input
-                id="add-entry-price"
-                inputMode="decimal"
-                {...form.register('entry.price')}
-              />
-              {form.formState.errors.entry?.price && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.entry.price.message}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Цена в котируемой валюте (обычно USDT).
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-entry-fee">Комиссия входа</Label>
-              <Input
-                id="add-entry-fee"
-                inputMode="decimal"
-                {...form.register('entry.fee')}
-              />
-              {form.formState.errors.entry?.fee && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.entry.fee.message}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="add-entry-fee-asset">Актив комиссии</Label>
-              <Input
-                id="add-entry-fee-asset"
-                {...form.register('entry.feeAsset')}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="add-entry-note">Заметка</Label>
               <Input id="add-entry-note" {...form.register('note')} />
               {form.formState.errors.note && (
