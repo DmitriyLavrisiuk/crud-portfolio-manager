@@ -12,9 +12,11 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type ColumnDef,
+  type Cell,
   flexRender,
-  getCoreRowModel,
-  useReactTable,
+  type Header,
+  type HeaderGroup,
+  type Row,
 } from '@tanstack/react-table'
 
 import { useAuth } from '@/auth/AuthProvider'
@@ -64,6 +66,7 @@ import {
   type BinanceSpotOrder,
   type BinanceSpotTrade,
 } from '@/lib/binance'
+import { useAppTable } from '@/lib/table'
 
 const emptyToUndefined = (value: unknown) => {
   if (value === '' || value === null || value === undefined) {
@@ -685,7 +688,7 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
       {
         id: 'actions',
         header: 'Actions',
-        cell: ({ row }) => {
+        cell: ({ row }: { row: Row<BinanceSpotOrder> }) => {
           const order = row.original
           const canEdit =
             order.type === 'LIMIT' &&
@@ -717,10 +720,9 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
     [handleCancelOpen, handleEditOpen],
   )
 
-  const table = useReactTable({
+  const table = useAppTable({
     data: openOrdersQuery.data ?? [],
     columns,
-    getCoreRowModel: getCoreRowModel(),
   })
 
   const handleLoad = useCallback(() => {
@@ -793,33 +795,39 @@ const OpenOrdersCard = memo(function OpenOrdersCard() {
           <div className="rounded-md border border-border">
             <Table>
               <TableHeader>
-                {table.getHeaderGroups().map((group) => (
-                  <TableRow key={group.id}>
-                    {group.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
+                {table
+                  .getHeaderGroups()
+                  .map((group: HeaderGroup<BinanceSpotOrder>) => (
+                    <TableRow key={group.id}>
+                      {group.headers.map(
+                        (header: Header<BinanceSpotOrder, unknown>) => (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext(),
+                                )}
+                          </TableHead>
+                        ),
+                      )}
+                    </TableRow>
+                  ))}
               </TableHeader>
               <TableBody>
                 {table.getRowModel().rows.length ? (
-                  table.getRowModel().rows.map((row) => (
+                  table.getRowModel().rows.map((row: Row<BinanceSpotOrder>) => (
                     <TableRow key={row.id}>
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </TableCell>
-                      ))}
+                      {row
+                        .getVisibleCells()
+                        .map((cell: Cell<BinanceSpotOrder, unknown>) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </TableCell>
+                        ))}
                     </TableRow>
                   ))
                 ) : (
@@ -970,12 +978,14 @@ const RecentTradesCard = memo(function RecentTradesCard() {
       {
         accessorKey: 'time',
         header: 'Time',
-        cell: ({ row }) => new Date(row.original.time).toLocaleString(),
+        cell: ({ row }: { row: Row<BinanceSpotTrade> }) =>
+          new Date(row.original.time).toLocaleString(),
       },
       {
         id: 'side',
         header: 'Side',
-        cell: ({ row }) => (row.original.isBuyer ? 'BUY' : 'SELL'),
+        cell: ({ row }: { row: Row<BinanceSpotTrade> }) =>
+          row.original.isBuyer ? 'BUY' : 'SELL',
       },
       { accessorKey: 'price', header: 'Price' },
       { accessorKey: 'qty', header: 'Qty' },
@@ -983,17 +993,16 @@ const RecentTradesCard = memo(function RecentTradesCard() {
       {
         id: 'commission',
         header: 'Commission',
-        cell: ({ row }) =>
+        cell: ({ row }: { row: Row<BinanceSpotTrade> }) =>
           `${row.original.commission} ${row.original.commissionAsset}`,
       },
     ],
     [],
   )
 
-  const table = useReactTable({
+  const table = useAppTable({
     data: tradesQuery.data ?? [],
     columns,
-    getCoreRowModel: getCoreRowModel(),
   })
 
   const handleLoad = useCallback(() => {
@@ -1041,33 +1050,39 @@ const RecentTradesCard = memo(function RecentTradesCard() {
           <div className="rounded-md border border-border">
             <Table>
               <TableHeader>
-                {table.getHeaderGroups().map((group) => (
-                  <TableRow key={group.id}>
-                    {group.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
+                {table
+                  .getHeaderGroups()
+                  .map((group: HeaderGroup<BinanceSpotTrade>) => (
+                    <TableRow key={group.id}>
+                      {group.headers.map(
+                        (header: Header<BinanceSpotTrade, unknown>) => (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext(),
+                                )}
+                          </TableHead>
+                        ),
+                      )}
+                    </TableRow>
+                  ))}
               </TableHeader>
               <TableBody>
                 {table.getRowModel().rows.length ? (
-                  table.getRowModel().rows.map((row) => (
+                  table.getRowModel().rows.map((row: Row<BinanceSpotTrade>) => (
                     <TableRow key={row.id}>
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </TableCell>
-                      ))}
+                      {row
+                        .getVisibleCells()
+                        .map((cell: Cell<BinanceSpotTrade, unknown>) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </TableCell>
+                        ))}
                     </TableRow>
                   ))
                 ) : (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -21,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatInputValue } from '@/lib/format'
+import { toastError, toastWarning } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
 import {
   closeWithOrderSchema,
@@ -47,8 +49,6 @@ export default function CloseWithOrderDialog({
 }: CloseWithOrderDialogProps) {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
-  const [warning, setWarning] = useState<string | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const closeSide = getCloseSide(deal)
 
   const form = useForm<CloseWithOrderFormValues>({
@@ -56,7 +56,7 @@ export default function CloseWithOrderDialog({
     defaultValues: {
       closeSide,
       marketBuyMode: closeSide === 'BUY' ? 'BASE' : undefined,
-      quantity: deal.entry?.qty ?? '',
+      quantity: deal.entry?.qty ? formatInputValue(deal.entry.qty, 'qty') : '',
       quoteOrderQty: '',
       note: '',
     },
@@ -70,12 +70,10 @@ export default function CloseWithOrderDialog({
     form.reset({
       closeSide,
       marketBuyMode: closeSide === 'BUY' ? 'BASE' : undefined,
-      quantity: deal.entry?.qty ?? '',
+      quantity: deal.entry?.qty ? formatInputValue(deal.entry.qty, 'qty') : '',
       quoteOrderQty: '',
       note: '',
     })
-    setWarning(null)
-    setErrorMessage(null)
   }, [open, form, closeSide, deal.entry?.qty])
 
   const dealsQueryKey = useMemo(() => ['deals', queryFilters], [queryFilters])
@@ -101,7 +99,7 @@ export default function CloseWithOrderDialog({
       queryClient.invalidateQueries({ queryKey: dealsQueryKey })
       queryClient.invalidateQueries({ queryKey: statsQueryKey })
       onOpenChange(false)
-      onSuccess?.('Deal closed via market order')
+      onSuccess?.('Сделка закрыта через рыночный ордер')
     },
     onError: (error) => {
       const data = (
@@ -117,12 +115,10 @@ export default function CloseWithOrderDialog({
         data?.statusCode === 409 &&
         message.toLowerCase().includes('no fills')
       ) {
-        setWarning('fills ещё не доступны, попробуй позже')
-        setErrorMessage(null)
+        toastWarning('fills ещё не доступны, попробуй позже')
         return
       }
-      setWarning(null)
-      setErrorMessage(message)
+      toastError(`Ошибка закрытия: ${message}`)
     },
   })
 
@@ -130,7 +126,7 @@ export default function CloseWithOrderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Close with order</DialogTitle>
+          <DialogTitle>Закрыть через ордер</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -138,12 +134,12 @@ export default function CloseWithOrderDialog({
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Close side</Label>
+              <Label>Сторона закрытия</Label>
               <Input value={closeSide} readOnly />
             </div>
             {closeSide === 'BUY' && (
               <div className="space-y-2">
-                <Label htmlFor="close-order-buy-mode">Buy mode</Label>
+                <Label htmlFor="close-order-buy-mode">Режим покупки</Label>
                 <Select
                   value={marketBuyMode ?? 'BASE'}
                   onValueChange={(value) =>
@@ -162,11 +158,17 @@ export default function CloseWithOrderDialog({
                     <SelectItem value="BASE">BASE</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  QUOTE — купить на сумму (в котируемой валюте, обычно USDT).
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  BASE — купить/продать количество (в базовой валюте).
+                </p>
               </div>
             )}
             {(closeSide === 'SELL' || marketBuyMode === 'BASE') && (
               <div className="space-y-2">
-                <Label htmlFor="close-order-qty">Quantity</Label>
+                <Label htmlFor="close-order-qty">Количество</Label>
                 <Input
                   id="close-order-qty"
                   inputMode="decimal"
@@ -181,7 +183,7 @@ export default function CloseWithOrderDialog({
             )}
             {closeSide === 'BUY' && marketBuyMode === 'QUOTE' && (
               <div className="space-y-2">
-                <Label htmlFor="close-order-quote">Quote amount</Label>
+                <Label htmlFor="close-order-quote">Сумма в quote</Label>
                 <Input
                   id="close-order-quote"
                   inputMode="decimal"
@@ -195,7 +197,7 @@ export default function CloseWithOrderDialog({
               </div>
             )}
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="close-order-note">Note</Label>
+              <Label htmlFor="close-order-note">Заметка</Label>
               <Input id="close-order-note" {...form.register('note')} />
               {form.formState.errors.note && (
                 <p className="text-sm text-destructive">
@@ -205,23 +207,12 @@ export default function CloseWithOrderDialog({
             </div>
           </div>
 
-          {warning && (
-            <p className="text-sm text-amber-600" role="alert">
-              {warning}
-            </p>
-          )}
-          {errorMessage && (
-            <p className="text-sm text-destructive" role="alert">
-              {errorMessage}
-            </p>
-          )}
-
           <div className="flex justify-end">
             <Button
               type="submit"
               disabled={!form.formState.isValid || mutation.isPending}
             >
-              {mutation.isPending ? 'Submitting...' : 'Close with order'}
+              {mutation.isPending ? 'Отправляем...' : 'Закрыть через ордер'}
             </Button>
           </div>
         </form>

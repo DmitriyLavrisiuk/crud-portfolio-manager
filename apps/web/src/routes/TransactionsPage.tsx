@@ -5,9 +5,11 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type ColumnDef,
+  type Cell,
   flexRender,
-  getCoreRowModel,
-  useReactTable,
+  type Header,
+  type HeaderGroup,
+  type Row,
 } from '@tanstack/react-table'
 
 import { useAuth } from '@/auth/AuthProvider'
@@ -55,6 +57,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { useAppTable } from '@/lib/table'
 
 const emptyToUndefined = (value: unknown) => {
   if (value === '' || value === null || value === undefined) {
@@ -262,7 +265,7 @@ export default function TransactionsPage() {
       {
         accessorKey: 'occurredAt',
         header: 'Date',
-        cell: ({ row }) =>
+        cell: ({ row }: { row: Row<Transaction> }) =>
           row.original.occurredAt
             ? new Date(row.original.occurredAt).toLocaleDateString()
             : '—',
@@ -270,37 +273,46 @@ export default function TransactionsPage() {
       {
         accessorKey: 'type',
         header: 'Type',
-        cell: ({ getValue }) => getValue(),
+        cell: ({ getValue }: { getValue: () => unknown }) => {
+          const value = getValue()
+          return typeof value === 'string' ? value : String(value ?? '')
+        },
       },
       {
         accessorKey: 'symbol',
         header: 'Symbol',
-        cell: ({ getValue }) => getValue(),
+        cell: ({ getValue }: { getValue: () => unknown }) => {
+          const value = getValue()
+          return typeof value === 'string' ? value : String(value ?? '')
+        },
       },
       {
         accessorKey: 'quantity',
         header: 'Quantity',
-        cell: ({ row }) => formatNumber(row.original.quantity),
+        cell: ({ row }: { row: Row<Transaction> }) =>
+          formatNumber(row.original.quantity),
       },
       {
         accessorKey: 'price',
         header: 'Price',
-        cell: ({ row }) => formatNumber(row.original.price),
+        cell: ({ row }: { row: Row<Transaction> }) =>
+          formatNumber(row.original.price),
       },
       {
         accessorKey: 'fee',
         header: 'Fee',
-        cell: ({ row }) => formatNumber(row.original.fee),
+        cell: ({ row }: { row: Row<Transaction> }) =>
+          formatNumber(row.original.fee),
       },
       {
         accessorKey: 'note',
         header: 'Note',
-        cell: ({ row }) => row.original.note || '—',
+        cell: ({ row }: { row: Row<Transaction> }) => row.original.note || '—',
       },
       {
         id: 'actions',
         header: 'Actions',
-        cell: ({ row }) => (
+        cell: ({ row }: { row: Row<Transaction> }) => (
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
@@ -323,10 +335,9 @@ export default function TransactionsPage() {
     [],
   )
 
-  const table = useReactTable({
+  const table = useAppTable({
     data: items,
     columns,
-    getCoreRowModel: getCoreRowModel(),
   })
 
   return (
@@ -411,33 +422,39 @@ export default function TransactionsPage() {
             <div className="rounded-md border border-border">
               <Table>
                 <TableHeader>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  ))}
+                  {table
+                    .getHeaderGroups()
+                    .map((headerGroup: HeaderGroup<Transaction>) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map(
+                          (header: Header<Transaction, unknown>) => (
+                            <TableHead key={header.id}>
+                              {header.isPlaceholder
+                                ? null
+                                : flexRender(
+                                    header.column.columnDef.header,
+                                    header.getContext(),
+                                  )}
+                            </TableHead>
+                          ),
+                        )}
+                      </TableRow>
+                    ))}
                 </TableHeader>
                 <TableBody>
                   {table.getRowModel().rows.length ? (
-                    table.getRowModel().rows.map((row) => (
+                    table.getRowModel().rows.map((row: Row<Transaction>) => (
                       <TableRow key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </TableCell>
-                        ))}
+                        {row
+                          .getVisibleCells()
+                          .map((cell: Cell<Transaction, unknown>) => (
+                            <TableCell key={cell.id}>
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
+                              )}
+                            </TableCell>
+                          ))}
                       </TableRow>
                     ))
                   ) : (

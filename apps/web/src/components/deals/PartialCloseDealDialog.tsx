@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '@/auth/AuthProvider'
-import { closeDeal } from '@/api/dealsApi'
+import { partialCloseDeal } from '@/api/dealsApi'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,26 +25,29 @@ import { cn } from '@/lib/utils'
 import { fromLocalDateIso, toLocalDateIso } from '@/lib/dateLocal'
 import { toastError } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
-import { closeDealSchema, type CloseDealFormValues } from '@/validation/deals'
+import {
+  partialCloseDealSchema,
+  type PartialCloseDealFormValues,
+} from '@/validation/deals'
 
-type CloseDealDialogProps = {
+type PartialCloseDealDialogProps = {
   deal: Deal | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: (message: string) => void
 }
 
-export default function CloseDealDialog({
+export default function PartialCloseDealDialog({
   deal,
   open,
   onOpenChange,
   onSuccess,
-}: CloseDealDialogProps) {
+}: PartialCloseDealDialogProps) {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
 
-  const form = useForm<CloseDealFormValues>({
-    resolver: zodResolver(closeDealSchema),
+  const form = useForm<PartialCloseDealFormValues>({
+    resolver: zodResolver(partialCloseDealSchema),
     defaultValues: {
       closedAt: toLocalDateIso(new Date()),
       exit: {
@@ -53,6 +56,7 @@ export default function CloseDealDialog({
         fee: undefined,
         feeAsset: '',
       },
+      note: '',
     },
   })
 
@@ -66,24 +70,28 @@ export default function CloseDealDialog({
         fee: undefined,
         feeAsset: '',
       },
+      note: '',
     })
   }, [open, form])
 
   const closeMutation = useMutation({
-    mutationFn: async (values: CloseDealFormValues) => {
+    mutationFn: async (values: PartialCloseDealFormValues) => {
       if (!deal) {
         throw new Error('No deal selected')
       }
       const payload = {
-        closedAt: toLocalDateIso(fromLocalDateIso(values.closedAt)),
+        closedAt: values.closedAt
+          ? toLocalDateIso(fromLocalDateIso(values.closedAt))
+          : undefined,
         exit: {
           qty: values.exit.qty,
           price: values.exit.price,
           fee: values.exit.fee || undefined,
           feeAsset: values.exit.feeAsset?.trim() || undefined,
         },
+        note: values.note?.trim() || undefined,
       }
-      return closeDeal(deal.id, payload, {
+      return partialCloseDeal(deal.id, payload, {
         accessToken,
         onUnauthorized: refresh,
       })
@@ -92,14 +100,14 @@ export default function CloseDealDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Сделка закрыта')
+      onSuccess?.('Сделка частично закрыта')
     },
     onError: (error) => {
       if (error instanceof Error) {
-        toastError(`Ошибка закрытия: ${error.message}`)
+        toastError(`Ошибка частичного закрытия: ${error.message}`)
         return
       }
-      toastError('Ошибка закрытия: неизвестная ошибка')
+      toastError('Ошибка частичного закрытия: неизвестная ошибка')
     },
   })
 
@@ -107,7 +115,7 @@ export default function CloseDealDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Закрыть сделку</DialogTitle>
+          <DialogTitle>Частичное закрытие</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -168,11 +176,11 @@ export default function CloseDealDialog({
               </p>
               <div className="grid gap-2 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="close-deal-exit-qty">
+                  <Label htmlFor="partial-close-exit-qty">
                     Объем выхода (qty)
                   </Label>
                   <Input
-                    id="close-deal-exit-qty"
+                    id="partial-close-exit-qty"
                     inputMode="decimal"
                     {...form.register('exit.qty')}
                   />
@@ -186,9 +194,9 @@ export default function CloseDealDialog({
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="close-deal-exit-price">Цена выхода</Label>
+                  <Label htmlFor="partial-close-exit-price">Цена выхода</Label>
                   <Input
-                    id="close-deal-exit-price"
+                    id="partial-close-exit-price"
                     inputMode="decimal"
                     {...form.register('exit.price')}
                   />
@@ -204,9 +212,11 @@ export default function CloseDealDialog({
               </div>
               <div className="grid gap-2 md:grid-cols-[1fr_140px]">
                 <div className="space-y-2">
-                  <Label htmlFor="close-deal-exit-fee">Комиссия выхода</Label>
+                  <Label htmlFor="partial-close-exit-fee">
+                    Комиссия выхода
+                  </Label>
                   <Input
-                    id="close-deal-exit-fee"
+                    id="partial-close-exit-fee"
                     inputMode="decimal"
                     {...form.register('exit.fee')}
                   />
@@ -217,19 +227,28 @@ export default function CloseDealDialog({
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="close-deal-exit-fee-asset">Актив</Label>
+                  <Label htmlFor="partial-close-exit-fee-asset">Актив</Label>
                   <Input
-                    id="close-deal-exit-fee-asset"
+                    id="partial-close-exit-fee-asset"
                     {...form.register('exit.feeAsset')}
                   />
                 </div>
               </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="partial-close-note">Заметка</Label>
+              <Input id="partial-close-note" {...form.register('note')} />
+              {form.formState.errors.note && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.note.message}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end">
             <Button type="submit" disabled={closeMutation.isPending}>
-              {closeMutation.isPending ? 'Закрываем...' : 'Закрыть сделку'}
+              {closeMutation.isPending ? 'Закрываем...' : 'Частично закрыть'}
             </Button>
           </div>
         </form>

@@ -2,9 +2,11 @@ import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   type ColumnDef,
+  type Cell,
   flexRender,
-  getCoreRowModel,
-  useReactTable,
+  type Header,
+  type HeaderGroup,
+  type Row,
 } from '@tanstack/react-table'
 
 import { useAuth } from '@/auth/AuthProvider'
@@ -43,6 +45,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { useAppTable } from '@/lib/table'
 
 type UserRole = 'admin' | 'user'
 
@@ -159,12 +162,15 @@ export default function AdminUsersPage() {
       {
         accessorKey: 'email',
         header: 'Email',
-        cell: ({ getValue }) => getValue(),
+        cell: ({ getValue }: { getValue: () => unknown }) => {
+          const value = getValue()
+          return typeof value === 'string' ? value : String(value ?? '')
+        },
       },
       {
         accessorKey: 'role',
         header: 'Role',
-        cell: ({ row }) => (
+        cell: ({ row }: { row: Row<UserRow> }) => (
           <Badge
             variant={row.original.role === 'admin' ? 'default' : 'secondary'}
           >
@@ -175,7 +181,7 @@ export default function AdminUsersPage() {
       {
         accessorKey: 'createdAt',
         header: 'Created',
-        cell: ({ row }) =>
+        cell: ({ row }: { row: Row<UserRow> }) =>
           row.original.createdAt
             ? new Date(row.original.createdAt).toLocaleDateString()
             : '—',
@@ -183,7 +189,7 @@ export default function AdminUsersPage() {
       {
         id: 'actions',
         header: 'Actions',
-        cell: ({ row }) => {
+        cell: ({ row }: { row: Row<UserRow> }) => {
           const isSelf = row.original.id === user?.id
           return (
             <div className="flex flex-wrap items-center gap-2">
@@ -240,10 +246,9 @@ export default function AdminUsersPage() {
     [deleteMutation, updateRoleMutation, user?.id],
   )
 
-  const table = useReactTable({
+  const table = useAppTable({
     data,
     columns,
-    getCoreRowModel: getCoreRowModel(),
   })
 
   return (
@@ -274,33 +279,39 @@ export default function AdminUsersPage() {
               <div className="rounded-md border border-border">
                 <Table>
                   <TableHeader>
-                    {table.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                          <TableHead key={header.id}>
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext(),
-                                )}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    ))}
+                    {table
+                      .getHeaderGroups()
+                      .map((headerGroup: HeaderGroup<UserRow>) => (
+                        <TableRow key={headerGroup.id}>
+                          {headerGroup.headers.map(
+                            (header: Header<UserRow, unknown>) => (
+                              <TableHead key={header.id}>
+                                {header.isPlaceholder
+                                  ? null
+                                  : flexRender(
+                                      header.column.columnDef.header,
+                                      header.getContext(),
+                                    )}
+                              </TableHead>
+                            ),
+                          )}
+                        </TableRow>
+                      ))}
                   </TableHeader>
                   <TableBody>
                     {table.getRowModel().rows.length ? (
-                      table.getRowModel().rows.map((row) => (
+                      table.getRowModel().rows.map((row: Row<UserRow>) => (
                         <TableRow key={row.id}>
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id}>
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext(),
-                              )}
-                            </TableCell>
-                          ))}
+                          {row
+                            .getVisibleCells()
+                            .map((cell: Cell<UserRow, unknown>) => (
+                              <TableCell key={cell.id}>
+                                {flexRender(
+                                  cell.column.columnDef.cell,
+                                  cell.getContext(),
+                                )}
+                              </TableCell>
+                            ))}
                         </TableRow>
                       ))
                     ) : (

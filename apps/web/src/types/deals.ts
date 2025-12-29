@@ -9,6 +9,26 @@ export type DealLeg = {
   feeAsset?: string
 }
 
+export type DealEntryLeg = DealLeg & {
+  openedAt: string
+  source?: 'MANUAL' | 'BINANCE'
+  orderId?: number
+}
+
+export type DealProfitOp = {
+  at: string
+  amount: string
+  price: string
+  qty: string
+  note?: string
+}
+
+export type DealExitLeg = DealLeg & {
+  closedAt: string
+  source?: 'MANUAL' | 'BINANCE'
+  orderId?: number
+}
+
 export type TradeFill = {
   id: number
   orderId: number
@@ -46,7 +66,17 @@ export type Deal = {
   openedAt: string
   closedAt?: string
   entry: DealLeg
+  entryLegs?: DealEntryLeg[]
   exit?: DealLeg
+  exitLegs?: DealExitLeg[]
+  closedQty?: string
+  remainingQty?: string
+  entryQtyTotal?: string
+  entryQuoteTotal?: string
+  entryAvgPrice?: string
+  profitOps?: DealProfitOp[]
+  profitSpentTotal?: string
+  realizedPnlAvailable?: string
   realizedPnl?: string
   note?: string
   createdAt?: string
@@ -86,4 +116,7 @@ export type DealsStatsResponse = {
   avgPnL: string
   feesTotal: string
   openCount: number
+  totalRealizedPnl: string
+  totalProfitSpent: string
+  profitAvailable: string
 }

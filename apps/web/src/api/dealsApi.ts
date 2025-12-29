@@ -37,6 +37,49 @@ export type CloseDealPayload = {
   exit: DealExitPayload
 }
 
+export type PartialCloseDealPayload = {
+  closedAt?: string
+  exit: DealExitPayload
+  note?: string
+}
+
+export type AddEntryLegPayload = {
+  openedAt?: string
+  entry: DealEntryPayload
+  note?: string
+}
+
+export type AddEntryLegResponse = {
+  deal: Deal
+  entryAgg: {
+    qtyTotal: string
+    quoteTotal: string
+    avgPrice: string
+  }
+  remainingQty: string
+}
+
+export type ProfitToPositionPayload = {
+  amount: string
+  price: string
+  at?: string
+  note?: string
+}
+
+export type ProfitToPositionResponse = {
+  deal: Deal
+  realizedAvailableAfter: string
+  newEntryAgg: {
+    qtyTotal: string
+    quoteTotal: string
+    avgPrice: string
+  }
+  profitAvailableBefore: string
+  profitAvailableAfter: string
+  totalProfitSpent: string
+  totalRealizedPnl: string
+}
+
 export type ImportTradesPayload = {
   phase: 'ENTRY' | 'EXIT'
   orderId: number
@@ -86,11 +129,21 @@ function buildQuery(filters: DealsListFilters) {
 }
 
 export async function fetchDeals(filters: DealsListFilters, auth: AuthOptions) {
-  return apiFetch<DealsListResponse>(`/deals${buildQuery(filters)}`, {
-    method: 'GET',
-    accessToken: auth.accessToken,
-    onUnauthorized: auth.onUnauthorized,
-  })
+  const result = await apiFetch<DealsListResponse>(
+    `/deals${buildQuery(filters)}`,
+    {
+      method: 'GET',
+      accessToken: auth.accessToken,
+      onUnauthorized: auth.onUnauthorized,
+    },
+  )
+  return {
+    ...result,
+    items: result.items.map((deal) => ({
+      ...deal,
+      id: deal.id || deal._id || '',
+    })),
+  }
 }
 
 export async function createDeal(
@@ -131,9 +184,61 @@ export async function closeDeal(
   })
 }
 
+export async function partialCloseDeal(
+  id: string,
+  payload: PartialCloseDealPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<Deal>(`/deals/${id}/partial-close`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function addEntryLeg(
+  id: string,
+  payload: AddEntryLegPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<AddEntryLegResponse>(`/deals/${id}/add-entry`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function profitToPosition(
+  id: string,
+  payload: ProfitToPositionPayload,
+  auth: AuthOptions,
+) {
+  return apiFetch<ProfitToPositionResponse>(`/deals/${id}/profit-to-position`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
 export async function deleteDeal(id: string, auth: AuthOptions) {
-  return apiFetch<{ ok: true }>(`/deals/${id}`, {
+  return apiFetch<{ ok: true; id: string }>(`/deals/${id}`, {
     method: 'DELETE',
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function bulkDeleteDeals(ids: string[], auth: AuthOptions) {
+  return apiFetch<{
+    ok: true
+    deletedCount: number
+    deletedIds: string[]
+  }>(`/deals/bulk-delete`, {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
     accessToken: auth.accessToken,
     onUnauthorized: auth.onUnauthorized,
   })

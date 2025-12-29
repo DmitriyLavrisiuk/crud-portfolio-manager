@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { type DealsListFilters } from '@/api/dealsApi'
+import { toastError, toastWarning } from '@/lib/toast'
 import {
   openWithOrderSchema,
   type OpenWithOrderFormValues,
@@ -51,8 +52,6 @@ export default function OpenWithOrderDialog({
 }: OpenWithOrderDialogProps) {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
-  const [warning, setWarning] = useState<string | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const form = useForm<OpenWithOrderFormValues>({
     resolver: zodResolver(openWithOrderSchema),
@@ -68,8 +67,6 @@ export default function OpenWithOrderDialog({
   useEffect(() => {
     if (!open) return
     form.reset(defaultValues)
-    setWarning(null)
-    setErrorMessage(null)
   }, [open, form])
 
   const dealsQueryKey = useMemo(() => ['deals', queryFilters], [queryFilters])
@@ -97,7 +94,7 @@ export default function OpenWithOrderDialog({
       queryClient.invalidateQueries({ queryKey: dealsQueryKey })
       queryClient.invalidateQueries({ queryKey: statsQueryKey })
       onOpenChange(false)
-      onSuccess?.('Deal opened via market order')
+      onSuccess?.('Сделка открыта через рыночный ордер')
     },
     onError: (error) => {
       const data = (
@@ -113,14 +110,12 @@ export default function OpenWithOrderDialog({
         data?.statusCode === 409 &&
         message.toLowerCase().includes('no fills')
       ) {
-        setWarning(
+        toastWarning(
           'Ордер создан, но fills ещё не доступны. Попробуй ещё раз через 2–5 сек.',
         )
-        setErrorMessage(null)
         return
       }
-      setWarning(null)
-      setErrorMessage(message)
+      toastError(`Ошибка открытия: ${message}`)
     },
   })
 
@@ -128,7 +123,7 @@ export default function OpenWithOrderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Open with order</DialogTitle>
+          <DialogTitle>Открыть через ордер</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -136,7 +131,7 @@ export default function OpenWithOrderDialog({
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="open-order-symbol">Symbol</Label>
+              <Label htmlFor="open-order-symbol">Символ</Label>
               <Input
                 id="open-order-symbol"
                 value={form.watch('symbol')}
@@ -157,7 +152,7 @@ export default function OpenWithOrderDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="open-order-direction">Direction</Label>
+              <Label htmlFor="open-order-direction">Направление</Label>
               <Select
                 value={direction}
                 onValueChange={(value) =>
@@ -179,7 +174,7 @@ export default function OpenWithOrderDialog({
             </div>
             {isBuy && (
               <div className="space-y-2">
-                <Label htmlFor="open-order-buy-mode">Buy mode</Label>
+                <Label htmlFor="open-order-buy-mode">Режим покупки</Label>
                 <Select
                   value={marketBuyMode ?? 'QUOTE'}
                   onValueChange={(value) =>
@@ -198,11 +193,17 @@ export default function OpenWithOrderDialog({
                     <SelectItem value="BASE">BASE</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  QUOTE — купить на сумму (в котируемой валюте, обычно USDT).
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  BASE — купить/продать количество (в базовой валюте).
+                </p>
               </div>
             )}
             {isBuy && marketBuyMode === 'QUOTE' && (
               <div className="space-y-2">
-                <Label htmlFor="open-order-quote">Quote amount</Label>
+                <Label htmlFor="open-order-quote">Сумма в quote</Label>
                 <Input
                   id="open-order-quote"
                   inputMode="decimal"
@@ -217,7 +218,7 @@ export default function OpenWithOrderDialog({
             )}
             {((isBuy && marketBuyMode === 'BASE') || !isBuy) && (
               <div className="space-y-2">
-                <Label htmlFor="open-order-qty">Quantity</Label>
+                <Label htmlFor="open-order-qty">Количество</Label>
                 <Input
                   id="open-order-qty"
                   inputMode="decimal"
@@ -231,7 +232,7 @@ export default function OpenWithOrderDialog({
               </div>
             )}
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="open-order-note">Note</Label>
+              <Label htmlFor="open-order-note">Заметка</Label>
               <Input id="open-order-note" {...form.register('note')} />
               {form.formState.errors.note && (
                 <p className="text-sm text-destructive">
@@ -241,23 +242,12 @@ export default function OpenWithOrderDialog({
             </div>
           </div>
 
-          {warning && (
-            <p className="text-sm text-amber-600" role="alert">
-              {warning}
-            </p>
-          )}
-          {errorMessage && (
-            <p className="text-sm text-destructive" role="alert">
-              {errorMessage}
-            </p>
-          )}
-
           <div className="flex justify-end">
             <Button
               type="submit"
               disabled={!form.formState.isValid || mutation.isPending}
             >
-              {mutation.isPending ? 'Submitting...' : 'Open with order'}
+              {mutation.isPending ? 'Отправляем...' : 'Открыть через ордер'}
             </Button>
           </div>
         </form>

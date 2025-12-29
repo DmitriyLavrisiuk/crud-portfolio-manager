@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '@/auth/AuthProvider'
-import { closeDeal } from '@/api/dealsApi'
+import { addEntryLeg } from '@/api/dealsApi'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,65 +25,73 @@ import { cn } from '@/lib/utils'
 import { fromLocalDateIso, toLocalDateIso } from '@/lib/dateLocal'
 import { toastError } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
-import { closeDealSchema, type CloseDealFormValues } from '@/validation/deals'
+import {
+  addEntryLegSchema,
+  type AddEntryLegFormValues,
+} from '@/validation/deals'
 
-type CloseDealDialogProps = {
+type AddEntryLegDialogProps = {
   deal: Deal | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: (message: string) => void
 }
 
-export default function CloseDealDialog({
+export default function AddEntryLegDialog({
   deal,
   open,
   onOpenChange,
   onSuccess,
-}: CloseDealDialogProps) {
+}: AddEntryLegDialogProps) {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
 
-  const form = useForm<CloseDealFormValues>({
-    resolver: zodResolver(closeDealSchema),
+  const form = useForm<AddEntryLegFormValues>({
+    resolver: zodResolver(addEntryLegSchema),
     defaultValues: {
-      closedAt: toLocalDateIso(new Date()),
-      exit: {
+      openedAt: toLocalDateIso(new Date()),
+      entry: {
         qty: '',
         price: '',
         fee: undefined,
         feeAsset: '',
       },
+      note: '',
     },
   })
 
   useEffect(() => {
     if (!open) return
     form.reset({
-      closedAt: toLocalDateIso(new Date()),
-      exit: {
+      openedAt: toLocalDateIso(new Date()),
+      entry: {
         qty: '',
         price: '',
         fee: undefined,
         feeAsset: '',
       },
+      note: '',
     })
   }, [open, form])
 
-  const closeMutation = useMutation({
-    mutationFn: async (values: CloseDealFormValues) => {
+  const addMutation = useMutation({
+    mutationFn: async (values: AddEntryLegFormValues) => {
       if (!deal) {
         throw new Error('No deal selected')
       }
       const payload = {
-        closedAt: toLocalDateIso(fromLocalDateIso(values.closedAt)),
-        exit: {
-          qty: values.exit.qty,
-          price: values.exit.price,
-          fee: values.exit.fee || undefined,
-          feeAsset: values.exit.feeAsset?.trim() || undefined,
+        openedAt: values.openedAt
+          ? toLocalDateIso(fromLocalDateIso(values.openedAt))
+          : undefined,
+        entry: {
+          qty: values.entry.qty,
+          price: values.entry.price,
+          fee: values.entry.fee || undefined,
+          feeAsset: values.entry.feeAsset?.trim() || undefined,
         },
+        note: values.note?.trim() || undefined,
       }
-      return closeDeal(deal.id, payload, {
+      return addEntryLeg(deal.id, payload, {
         accessToken,
         onUnauthorized: refresh,
       })
@@ -92,14 +100,14 @@ export default function CloseDealDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Сделка закрыта')
+      onSuccess?.('Вход добавлен')
     },
     onError: (error) => {
       if (error instanceof Error) {
-        toastError(`Ошибка закрытия: ${error.message}`)
+        toastError(`Ошибка добавления входа: ${error.message}`)
         return
       }
-      toastError('Ошибка закрытия: неизвестная ошибка')
+      toastError('Ошибка добавления входа: неизвестная ошибка')
     },
   })
 
@@ -107,28 +115,28 @@ export default function CloseDealDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Закрыть сделку</DialogTitle>
+          <DialogTitle>Добавить вход (DCA)</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
-          onSubmit={form.handleSubmit((values) => closeMutation.mutate(values))}
+          onSubmit={form.handleSubmit((values) => addMutation.mutate(values))}
         >
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Дата закрытия</Label>
+                <Label>Дата входа</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       className={cn(
                         'w-full justify-start text-left font-normal',
-                        !form.watch('closedAt') && 'text-muted-foreground',
+                        !form.watch('openedAt') && 'text-muted-foreground',
                       )}
                     >
-                      {form.watch('closedAt')
+                      {form.watch('openedAt')
                         ? format(
-                            fromLocalDateIso(form.watch('closedAt')),
+                            fromLocalDateIso(form.watch('openedAt')),
                             'dd.MM.yyyy',
                           )
                         : 'Выберите дату'}
@@ -138,16 +146,16 @@ export default function CloseDealDialog({
                     <Calendar
                       mode="single"
                       selected={
-                        form.watch('closedAt')
-                          ? fromLocalDateIso(form.watch('closedAt'))
+                        form.watch('openedAt')
+                          ? fromLocalDateIso(form.watch('openedAt'))
                           : undefined
                       }
                       onSelect={(date: Date | undefined) =>
                         form.setValue(
-                          'closedAt',
+                          'openedAt',
                           date
                             ? toLocalDateIso(date)
-                            : form.getValues('closedAt'),
+                            : form.getValues('openedAt'),
                           { shouldValidate: true, shouldDirty: true },
                         )
                       }
@@ -155,30 +163,28 @@ export default function CloseDealDialog({
                     />
                   </PopoverContent>
                 </Popover>
-                {form.formState.errors.closedAt && (
+                {form.formState.errors.openedAt && (
                   <p className="text-sm text-destructive">
-                    {form.formState.errors.closedAt.message}
+                    {form.formState.errors.openedAt.message}
                   </p>
                 )}
               </div>
             </div>
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground">
-                Выход
+                Вход
               </p>
               <div className="grid gap-2 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="close-deal-exit-qty">
-                    Объем выхода (qty)
-                  </Label>
+                  <Label htmlFor="add-entry-qty">Объем входа (qty)</Label>
                   <Input
-                    id="close-deal-exit-qty"
+                    id="add-entry-qty"
                     inputMode="decimal"
-                    {...form.register('exit.qty')}
+                    {...form.register('entry.qty')}
                   />
-                  {form.formState.errors.exit?.qty && (
+                  {form.formState.errors.entry?.qty && (
                     <p className="text-sm text-destructive">
-                      {form.formState.errors.exit.qty.message}
+                      {form.formState.errors.entry.qty.message}
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
@@ -186,15 +192,15 @@ export default function CloseDealDialog({
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="close-deal-exit-price">Цена выхода</Label>
+                  <Label htmlFor="add-entry-price">Цена входа</Label>
                   <Input
-                    id="close-deal-exit-price"
+                    id="add-entry-price"
                     inputMode="decimal"
-                    {...form.register('exit.price')}
+                    {...form.register('entry.price')}
                   />
-                  {form.formState.errors.exit?.price && (
+                  {form.formState.errors.entry?.price && (
                     <p className="text-sm text-destructive">
-                      {form.formState.errors.exit.price.message}
+                      {form.formState.errors.entry.price.message}
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
@@ -204,32 +210,41 @@ export default function CloseDealDialog({
               </div>
               <div className="grid gap-2 md:grid-cols-[1fr_140px]">
                 <div className="space-y-2">
-                  <Label htmlFor="close-deal-exit-fee">Комиссия выхода</Label>
+                  <Label htmlFor="add-entry-fee">Комиссия входа</Label>
                   <Input
-                    id="close-deal-exit-fee"
+                    id="add-entry-fee"
                     inputMode="decimal"
-                    {...form.register('exit.fee')}
+                    {...form.register('entry.fee')}
                   />
-                  {form.formState.errors.exit?.fee && (
+                  {form.formState.errors.entry?.fee && (
                     <p className="text-sm text-destructive">
-                      {form.formState.errors.exit.fee.message}
+                      {form.formState.errors.entry.fee.message}
                     </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="close-deal-exit-fee-asset">Актив</Label>
+                  <Label htmlFor="add-entry-fee-asset">Актив</Label>
                   <Input
-                    id="close-deal-exit-fee-asset"
-                    {...form.register('exit.feeAsset')}
+                    id="add-entry-fee-asset"
+                    {...form.register('entry.feeAsset')}
                   />
                 </div>
               </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-entry-note">Заметка</Label>
+              <Input id="add-entry-note" {...form.register('note')} />
+              {form.formState.errors.note && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.note.message}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={closeMutation.isPending}>
-              {closeMutation.isPending ? 'Закрываем...' : 'Закрыть сделку'}
+            <Button type="submit" disabled={addMutation.isPending}>
+              {addMutation.isPending ? 'Сохраняем...' : 'Добавить вход'}
             </Button>
           </div>
         </form>

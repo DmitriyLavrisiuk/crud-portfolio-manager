@@ -20,11 +20,17 @@ import {
   closeDealSchema,
   closeDealWithOrderSchema,
   createDealSchema,
+  addEntryLegSchema,
+  bulkDeleteDealsSchema,
   dealsStatsSchema,
   importTradesSchema,
   listDealsSchema,
   openDealWithOrderSchema,
+  partialCloseDealSchema,
+  profitToPositionSchema,
   updateDealSchema,
+  type AddEntryLegDto,
+  type BulkDeleteDealsDto,
   type CloseDealDto,
   type CloseDealWithOrderDto,
   type CreateDealDto,
@@ -32,6 +38,8 @@ import {
   type ImportTradesDto,
   type ListDealsQuery,
   type OpenDealWithOrderDto,
+  type PartialCloseDealDto,
+  type ProfitToPositionDto,
   type UpdateDealDto,
 } from './dto/deals.schemas'
 import type { Deal } from './schemas/deal.schema'
@@ -123,6 +131,62 @@ export class DealsController {
     return this.mapDeal(closed)
   }
 
+  @Post(':id/add-entry')
+  async addEntryLeg(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(addEntryLegSchema))
+    body: AddEntryLegDto,
+  ) {
+    const user = req.user as { id: string }
+    const result = await this.dealsService.addEntryLegForUser(user.id, id, body)
+    if (!result) {
+      throw new NotFoundException('Deal not found')
+    }
+
+    return result
+  }
+
+  @Post(':id/partial-close')
+  async partialCloseDeal(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(partialCloseDealSchema))
+    body: PartialCloseDealDto,
+  ) {
+    const user = req.user as { id: string }
+    const updated = await this.dealsService.partialCloseDealForUser(
+      user.id,
+      id,
+      body,
+    )
+    if (!updated) {
+      throw new NotFoundException('Deal not found')
+    }
+
+    return this.mapDeal(updated)
+  }
+
+  @Post(':id/profit-to-position')
+  async profitToPosition(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(profitToPositionSchema))
+    body: ProfitToPositionDto,
+  ) {
+    const user = req.user as { id: string }
+    const result = await this.dealsService.profitToPositionForUser(
+      user.id,
+      id,
+      body,
+    )
+    if (!result) {
+      throw new NotFoundException('Deal not found')
+    }
+
+    return result
+  }
+
   @Post('open-with-order')
   async openWithOrder(
     @Req() req: Request,
@@ -171,11 +235,21 @@ export class DealsController {
   @Delete(':id')
   async deleteDeal(@Req() req: Request, @Param('id') id: string) {
     const user = req.user as { id: string }
-    const deleted = await this.dealsService.deleteByIdForUser(user.id, id)
-    if (!deleted) {
+    const deletedId = await this.dealsService.deleteByIdForUser(user.id, id)
+    if (!deletedId) {
       throw new NotFoundException('Deal not found')
     }
-    return { ok: true }
+    return { ok: true, id: deletedId }
+  }
+
+  @Post('bulk-delete')
+  async bulkDeleteDeals(
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(bulkDeleteDealsSchema))
+    body: BulkDeleteDealsDto,
+  ) {
+    const user = req.user as { id: string }
+    return this.dealsService.bulkDeleteForUser(user.id, body.ids)
   }
 
   private mapDeal(deal: HydratedDocument<Deal> | (Deal & { _id: unknown })) {

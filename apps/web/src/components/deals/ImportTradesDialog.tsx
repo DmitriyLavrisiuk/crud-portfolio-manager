@@ -20,6 +20,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { type Deal, type ImportTradesResponse } from '@/types/deals'
+import {
+  formatMoneyDisplay,
+  formatPriceDisplay,
+  formatQtyDisplay,
+} from '@/lib/format'
+import { toastError } from '@/lib/toast'
 
 type ImportTradesDialogProps = {
   open: boolean
@@ -43,7 +49,6 @@ export default function ImportTradesDialog({
   const [hasLoaded, setHasLoaded] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     if (!open) return
     setOrderId('')
@@ -51,14 +56,13 @@ export default function ImportTradesDialog({
     setHasLoaded(false)
     setIsLoading(false)
     setIsApplying(false)
-    setError(null)
   }, [open, deal.id, phase])
   const aggregate = preview?.aggregate
   const previewRows = preview?.preview ?? []
   const parseOrderId = () => {
     const value = Number(orderId)
     if (!Number.isFinite(value) || value <= 0) {
-      setError('Order ID is required')
+      toastError('Нужно указать Order ID')
       return null
     }
     return value
@@ -66,7 +70,6 @@ export default function ImportTradesDialog({
   const handleLoadPreview = async () => {
     const parsedOrderId = parseOrderId()
     if (!parsedOrderId) return
-    setError(null)
     setIsLoading(true)
     try {
       const result = await importDealTrades(
@@ -77,7 +80,11 @@ export default function ImportTradesDialog({
       setPreview(result)
       setHasLoaded(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load preview')
+      toastError(
+        `Ошибка превью: ${
+          err instanceof Error ? err.message : 'Не удалось загрузить превью'
+        }`,
+      )
     } finally {
       setIsLoading(false)
     }
@@ -85,7 +92,6 @@ export default function ImportTradesDialog({
   const handleApply = async () => {
     const parsedOrderId = parseOrderId()
     if (!parsedOrderId) return
-    setError(null)
     setIsApplying(true)
     try {
       const result = await importDealTrades(
@@ -96,9 +102,15 @@ export default function ImportTradesDialog({
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.(`Imported ${result.importedCount} trades into ${phase}`)
+      onSuccess?.(
+        `Импортировано сделок: ${result.importedCount} (${phase === 'ENTRY' ? 'вход' : 'выход'})`,
+      )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to import trades')
+      toastError(
+        `Ошибка импорта: ${
+          err instanceof Error ? err.message : 'Не удалось импортировать'
+        }`,
+      )
     } finally {
       setIsApplying(false)
     }
@@ -110,7 +122,9 @@ export default function ImportTradesDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{`Import ${phase} trades`}</DialogTitle>
+          <DialogTitle>
+            {phase === 'ENTRY' ? 'Импорт сделок входа' : 'Импорт сделок выхода'}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
@@ -122,28 +136,33 @@ export default function ImportTradesDialog({
                 value={orderId}
                 onChange={(event) => setOrderId(event.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                Order ID можно посмотреть в Spot → Open orders / Recent trades.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Импорт подтянет исполнения (fills) и заполнит вход/выход.
+              </p>
             </div>
             <Button onClick={handleLoadPreview} disabled={disableLoad}>
-              {isLoading ? 'Loading...' : 'Load preview'}
+              {isLoading ? 'Загрузка...' : 'Показать превью'}
             </Button>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="space-y-2">
-            <p className="text-sm font-semibold">Preview</p>
+            <p className="text-sm font-semibold">Превью</p>
             {previewRows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No trades</p>
+              <p className="text-sm text-muted-foreground">Нет сделок</p>
             ) : (
               <div className="rounded-md border border-border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Time</TableHead>
-                      <TableHead>Side</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Qty</TableHead>
+                      <TableHead>Время</TableHead>
+                      <TableHead>Сторона</TableHead>
+                      <TableHead>Цена</TableHead>
+                      <TableHead>Количество</TableHead>
                       <TableHead>Quote</TableHead>
-                      <TableHead>Fee Asset</TableHead>
-                      <TableHead>Fee</TableHead>
+                      <TableHead>Комиссия (asset)</TableHead>
+                      <TableHead>Комиссия</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -153,11 +172,15 @@ export default function ImportTradesDialog({
                           {new Date(trade.time).toLocaleString()}
                         </TableCell>
                         <TableCell>{trade.isBuyer ? 'BUY' : 'SELL'}</TableCell>
-                        <TableCell>{trade.price}</TableCell>
-                        <TableCell>{trade.qty}</TableCell>
-                        <TableCell>{trade.quoteQty}</TableCell>
+                        <TableCell>{formatPriceDisplay(trade.price)}</TableCell>
+                        <TableCell>{formatQtyDisplay(trade.qty)}</TableCell>
+                        <TableCell>
+                          {formatMoneyDisplay(trade.quoteQty)}
+                        </TableCell>
                         <TableCell>{trade.commissionAsset}</TableCell>
-                        <TableCell>{trade.commission}</TableCell>
+                        <TableCell>
+                          {formatMoneyDisplay(trade.commission)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -166,25 +189,31 @@ export default function ImportTradesDialog({
             )}
           </div>
           <div className="space-y-2">
-            <p className="text-sm font-semibold">Aggregate</p>
+            <p className="text-sm font-semibold">Агрегат</p>
             <div className="grid gap-3 md:grid-cols-4">
               <div>
-                <p className="text-xs text-muted-foreground">Qty</p>
-                <p className="text-sm font-medium">{aggregate?.qty ?? '-'}</p>
+                <p className="text-xs text-muted-foreground">Количество</p>
+                <p className="text-sm font-medium">
+                  {formatQtyDisplay(aggregate?.qty)}
+                </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Avg Price</p>
-                <p className="text-sm font-medium">{aggregate?.price ?? '-'}</p>
+                <p className="text-xs text-muted-foreground">Средняя цена</p>
+                <p className="text-sm font-medium">
+                  {formatPriceDisplay(aggregate?.price)}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Quote</p>
-                <p className="text-sm font-medium">{aggregate?.quote ?? '-'}</p>
+                <p className="text-sm font-medium">
+                  {formatMoneyDisplay(aggregate?.quote)}
+                </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Fee</p>
+                <p className="text-xs text-muted-foreground">Комиссия</p>
                 <p className="text-sm font-medium">
                   {aggregate?.fee
-                    ? `${aggregate.fee} ${aggregate.feeAsset ?? ''}`.trim()
+                    ? `${formatMoneyDisplay(aggregate.fee)} ${aggregate.feeAsset ?? ''}`.trim()
                     : '-'}
                 </p>
               </div>
@@ -192,10 +221,10 @@ export default function ImportTradesDialog({
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Close
+              Закрыть
             </Button>
             <Button onClick={handleApply} disabled={disableApply}>
-              {isApplying ? 'Applying...' : 'Apply'}
+              {isApplying ? 'Применяем...' : 'Применить'}
             </Button>
           </div>
         </div>

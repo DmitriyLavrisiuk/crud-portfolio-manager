@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '@/auth/AuthProvider'
 import { deleteDeal } from '@/api/dealsApi'
+import { toastError } from '@/lib/toast'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,39 +13,52 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { type Deal } from '@/types/deals'
-
 type DeleteDealDialogProps = {
-  deal: Deal | null
+  dealId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: (message: string) => void
+  onDeleted?: (id: string) => void
 }
 
 export default function DeleteDealDialog({
-  deal,
+  dealId,
   open,
   onOpenChange,
   onSuccess,
+  onDeleted,
 }: DeleteDealDialogProps) {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      if (!deal) {
-        throw new Error('No deal selected')
+      if (!dealId) {
+        onOpenChange(false)
+        throw new Error('MISSING_DEAL')
       }
-      return deleteDeal(deal.id, {
+      return deleteDeal(dealId, {
         accessToken,
         onUnauthorized: refresh,
       })
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
-      onSuccess?.('Deal deleted')
+      onDeleted?.(result.id)
+      onSuccess?.('Сделка удалена')
+    },
+    onError: (error) => {
+      if (!(error instanceof Error)) {
+        toastError('Ошибка удаления: неизвестная ошибка')
+        return
+      }
+      if (error.message === 'MISSING_DEAL') {
+        toastError('Не удалось определить сделку для удаления')
+        return
+      }
+      toastError(`Ошибка удаления: ${error.message}`)
     },
   })
 
@@ -52,25 +66,20 @@ export default function DeleteDealDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete deal?</AlertDialogTitle>
+          <AlertDialogTitle>Удалить сделку?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone.
+            Это действие нельзя отменить.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        {deleteMutation.error instanceof Error && (
-          <p className="text-sm text-destructive">
-            {deleteMutation.error.message}
-          </p>
-        )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleteMutation.isPending}>
-            Cancel
+            Отмена
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={() => deleteMutation.mutate()}
             disabled={deleteMutation.isPending}
           >
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            {deleteMutation.isPending ? 'Удаляем...' : 'Удалить'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
