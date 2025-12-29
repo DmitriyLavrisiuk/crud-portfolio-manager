@@ -85,6 +85,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import EmptyState from '@/components/ui/empty-state'
 
 type FiltersState = {
   from: Date | null
@@ -993,7 +994,13 @@ export default function DealsPage() {
           {dealsQuery.isLoading && (
             <p className="text-sm text-muted-foreground">Загрузка сделок...</p>
           )}
-          {!dealsQuery.isLoading && (
+          {!dealsQuery.isLoading && data.length === 0 && (
+            <EmptyState
+              title="Сделок пока нет"
+              description="Создайте сделку или откройте через ордер."
+            />
+          )}
+          {!dealsQuery.isLoading && data.length > 0 && (
             <div className="w-full overflow-x-auto rounded-md border border-border">
               <Table className="min-w-[1200px]">
                 <TableHeader>
