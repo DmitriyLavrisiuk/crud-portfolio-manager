@@ -963,14 +963,6 @@ export default function DealsPage() {
                                 className="bg-muted/40 p-3"
                               >
                                 <div className="space-y-3">
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-sm font-semibold">
-                                      История операций
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      DCA / Реинвест / Частичное закрытие
-                                    </p>
-                                  </div>
                                   <DealHistoryPanel events={historyEvents} />
                                 </div>
                               </TableCell>
