@@ -59,6 +59,7 @@ import { useAppTable } from '@/lib/table'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { buildDealHistoryEvents } from '@/lib/dealsHistory'
+import { fromLocalDateIso, toLocalDateIso } from '@/lib/dateLocal'
 import CreateDealDialog from '@/components/deals/CreateDealDialog'
 import EditDealDialog from '@/components/deals/EditDealDialog'
 import CloseDealDialog from '@/components/deals/CloseDealDialog'
@@ -94,6 +95,8 @@ type FiltersState = {
   symbol: string
 }
 
+type DatePreset = '1w' | '1m' | '3m' | '6m' | 'all' | null
+
 function formatDateInput(date: Date) {
   return format(date, 'yyyy-MM-dd')
 }
@@ -117,6 +120,10 @@ function getDefaultFilters(): FiltersState {
 
 function normalizeSymbol(value: string) {
   return value.trim().toUpperCase()
+}
+
+function normalizeLocalDate(date: Date) {
+  return fromLocalDateIso(toLocalDateIso(date))
 }
 
 function parseObjectIdTimestamp(id: string) {
@@ -176,6 +183,7 @@ export default function DealsPage() {
     useState<FiltersState>(getDefaultFilters())
   const [statsOpen, setStatsOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  const [activePreset, setActivePreset] = useState<DatePreset>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [openWithOrderOpen, setOpenWithOrderOpen] = useState(false)
   const [editing, setEditing] = useState<Deal | null>(null)
@@ -214,6 +222,37 @@ export default function DealsPage() {
 
   const showNotice = useCallback((message: string) => {
     toastSuccess(message)
+  }, [])
+
+  const applyPreset = useCallback((preset: DatePreset) => {
+    setActivePreset(preset)
+    if (preset === 'all') {
+      setDraftFilters((prev) => ({
+        ...prev,
+        from: null,
+        to: null,
+      }))
+      return
+    }
+    if (!preset) {
+      return
+    }
+    const end = normalizeLocalDate(new Date())
+    const start = normalizeLocalDate(new Date(end))
+    if (preset === '1w') {
+      start.setDate(start.getDate() - 7)
+    } else if (preset === '1m') {
+      start.setMonth(start.getMonth() - 1)
+    } else if (preset === '3m') {
+      start.setMonth(start.getMonth() - 3)
+    } else if (preset === '6m') {
+      start.setMonth(start.getMonth() - 6)
+    }
+    setDraftFilters((prev) => ({
+      ...prev,
+      from: start,
+      to: end,
+    }))
   }, [])
 
   const queryFilters = useMemo(() => {
@@ -722,6 +761,7 @@ export default function DealsPage() {
     const defaults = getDefaultFilters()
     setDraftFilters(defaults)
     setAppliedFilters(defaults)
+    setActivePreset(null)
   }
 
   return (
@@ -896,12 +936,13 @@ export default function DealsPage() {
                     <Calendar
                       mode="single"
                       selected={draftFilters.from ?? undefined}
-                      onSelect={(date: Date | undefined) =>
+                      onSelect={(date: Date | undefined) => {
+                        setActivePreset(null)
                         setDraftFilters((prev) => ({
                           ...prev,
                           from: date ?? null,
                         }))
-                      }
+                      }}
                       initialFocus
                     />
                   </PopoverContent>
@@ -927,16 +968,59 @@ export default function DealsPage() {
                     <Calendar
                       mode="single"
                       selected={draftFilters.to ?? undefined}
-                      onSelect={(date: Date | undefined) =>
+                      onSelect={(date: Date | undefined) => {
+                        setActivePreset(null)
                         setDraftFilters((prev) => ({
                           ...prev,
                           to: date ?? null,
                         }))
-                      }
+                      }}
                       initialFocus
                     />
                   </PopoverContent>
                 </Popover>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+                <Button
+                  type="button"
+                  variant={activePreset === '1w' ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => applyPreset('1w')}
+                >
+                  1 неделя
+                </Button>
+                <Button
+                  type="button"
+                  variant={activePreset === '1m' ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => applyPreset('1m')}
+                >
+                  1 месяц
+                </Button>
+                <Button
+                  type="button"
+                  variant={activePreset === '3m' ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => applyPreset('3m')}
+                >
+                  3 месяца
+                </Button>
+                <Button
+                  type="button"
+                  variant={activePreset === '6m' ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => applyPreset('6m')}
+                >
+                  6 месяцев
+                </Button>
+                <Button
+                  type="button"
+                  variant={activePreset === 'all' ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => applyPreset('all')}
+                >
+                  Все время
+                </Button>
               </div>
               <div className="flex min-w-[180px] flex-1 flex-col gap-2">
                 <Label>Символ</Label>
