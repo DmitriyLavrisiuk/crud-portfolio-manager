@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type Cell,
@@ -9,7 +9,7 @@ import {
   type Row,
 } from '@tanstack/react-table'
 import { format } from 'date-fns'
-import { ChevronDown, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import type { CheckedState } from '@radix-ui/react-checkbox'
 
 import { useAuth } from '@/auth/AuthProvider'
@@ -50,6 +50,7 @@ import {
 import { useAppTable } from '@/lib/table'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { cn } from '@/lib/utils'
+import { buildDealHistoryEvents } from '@/lib/dealsHistory'
 import CreateDealDialog from '@/components/deals/CreateDealDialog'
 import EditDealDialog from '@/components/deals/EditDealDialog'
 import CloseDealDialog from '@/components/deals/CloseDealDialog'
@@ -59,6 +60,7 @@ import ProfitToPositionDialog from '@/components/deals/ProfitToPositionDialog'
 import ImportTradesDialog from '@/components/deals/ImportTradesDialog'
 import OpenWithOrderDialog from '@/components/deals/OpenWithOrderDialog'
 import CloseWithOrderDialog from '@/components/deals/CloseWithOrderDialog'
+import DealHistoryTable from '@/components/deals/DealHistoryTable'
 import DealsRowActions from '@/components/deals/DealsRowActions'
 import {
   Popover,
@@ -127,6 +129,7 @@ export default function DealsPage() {
   const [closingWithOrder, setClosingWithOrder] = useState<Deal | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [importing, setImporting] = useState<{
     deal: Deal
     phase: 'ENTRY' | 'EXIT'
@@ -207,6 +210,25 @@ export default function DealsPage() {
     })
   }, [data])
 
+  useEffect(() => {
+    const dataIds = new Set(data.map((deal) => deal.id))
+    setExpandedRows((prev) => {
+      if (prev.size === 0) {
+        return prev
+      }
+      let changed = false
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (dataIds.has(id)) {
+          next.add(id)
+        } else {
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [data])
+
   const handleEdit = useCallback((deal: Deal) => {
     setEditing(deal)
   }, [])
@@ -233,6 +255,18 @@ export default function DealsPage() {
 
   const handleImport = useCallback((deal: Deal, phase: 'ENTRY' | 'EXIT') => {
     setImporting({ deal, phase })
+  }, [])
+
+  const toggleExpandedRow = useCallback((dealId: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      if (next.has(dealId)) {
+        next.delete(dealId)
+      } else {
+        next.add(dealId)
+      }
+      return next
+    })
   }, [])
 
   const bulkDeleteMutation = useMutation({
@@ -496,27 +530,42 @@ export default function DealsPage() {
         id: 'actions',
         header: 'Действия',
         cell: ({ row }: { row: Row<Deal> }) => (
-          <DealsRowActions
-            deal={row.original}
-            onImportEntry={(deal) => handleImport(deal, 'ENTRY')}
-            onImportExit={(deal) => handleImport(deal, 'EXIT')}
-            onEdit={handleEdit}
-            onAddEntry={handleAddEntry}
-            onProfitToPosition={handleProfitToPosition}
-            onPartialClose={handlePartialClose}
-            onClose={handleClose}
-            onCloseWithOrder={handleCloseWithOrder}
-            onDeleted={(id) =>
-              setSelectedIds((prev) => {
-                if (!prev.has(id)) {
-                  return prev
-                }
-                const next = new Set(prev)
-                next.delete(id)
-                return next
-              })
-            }
-          />
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Показать историю сделки"
+              onClick={() => toggleExpandedRow(row.original.id)}
+            >
+              <ChevronRight
+                className={cn(
+                  'h-4 w-4 transition-transform',
+                  expandedRows.has(row.original.id) && 'rotate-90',
+                )}
+              />
+            </Button>
+            <DealsRowActions
+              deal={row.original}
+              onImportEntry={(deal) => handleImport(deal, 'ENTRY')}
+              onImportExit={(deal) => handleImport(deal, 'EXIT')}
+              onEdit={handleEdit}
+              onAddEntry={handleAddEntry}
+              onProfitToPosition={handleProfitToPosition}
+              onPartialClose={handlePartialClose}
+              onClose={handleClose}
+              onCloseWithOrder={handleCloseWithOrder}
+              onDeleted={(id) =>
+                setSelectedIds((prev) => {
+                  if (!prev.has(id)) {
+                    return prev
+                  }
+                  const next = new Set(prev)
+                  next.delete(id)
+                  return next
+                })
+              }
+            />
+          </div>
         ),
         meta: {
           headerClassName:
@@ -536,6 +585,8 @@ export default function DealsPage() {
       handleImport,
       data,
       selectedIds,
+      expandedRows,
+      toggleExpandedRow,
       getSignedClass,
       setSelectedIds,
     ],
@@ -879,27 +930,65 @@ export default function DealsPage() {
                 </TableHeader>
                 <TableBody>
                   {table.getRowModel().rows.length ? (
-                    table.getRowModel().rows.map((row: Row<Deal>) => (
-                      <TableRow key={row.id}>
-                        {row
-                          .getVisibleCells()
-                          .map((cell: Cell<Deal, unknown>) => (
-                            <TableCell
-                              key={cell.id}
-                              className={cn(
-                                'px-3 py-2 text-sm',
-                                cell.column.columnDef.meta?.cellClassName,
-                                cell.column.columnDef.meta?.sizeClassName,
-                              )}
-                            >
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext(),
-                              )}
-                            </TableCell>
-                          ))}
-                      </TableRow>
-                    ))
+                    table.getRowModel().rows.map((row: Row<Deal>) => {
+                      const isExpanded = expandedRows.has(row.original.id)
+                      const historyEvents = isExpanded
+                        ? buildDealHistoryEvents(row.original)
+                        : []
+                      return (
+                        <Fragment key={row.id}>
+                          <TableRow>
+                            {row
+                              .getVisibleCells()
+                              .map((cell: Cell<Deal, unknown>) => (
+                                <TableCell
+                                  key={cell.id}
+                                  className={cn(
+                                    'px-3 py-2 text-sm',
+                                    cell.column.columnDef.meta?.cellClassName,
+                                    cell.column.columnDef.meta?.sizeClassName,
+                                  )}
+                                >
+                                  {flexRender(
+                                    cell.column.columnDef.cell,
+                                    cell.getContext(),
+                                  )}
+                                </TableCell>
+                              ))}
+                          </TableRow>
+                          {isExpanded && (
+                            <TableRow>
+                              <TableCell
+                                colSpan={columns.length}
+                                className="bg-muted/40 p-3"
+                              >
+                                <div className="space-y-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-sm font-semibold">
+                                      История операций
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      DCA / Реинвест / Частичное закрытие
+                                    </p>
+                                  </div>
+                                  {historyEvents.length ? (
+                                    <div className="overflow-x-auto">
+                                      <DealHistoryTable
+                                        events={historyEvents}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                      Нет операций по сделке.
+                                    </p>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
+                      )
+                    })
                   ) : (
                     <TableRow>
                       <TableCell colSpan={columns.length}>
