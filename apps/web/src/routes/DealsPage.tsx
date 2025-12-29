@@ -60,7 +60,7 @@ import ProfitToPositionDialog from '@/components/deals/ProfitToPositionDialog'
 import ImportTradesDialog from '@/components/deals/ImportTradesDialog'
 import OpenWithOrderDialog from '@/components/deals/OpenWithOrderDialog'
 import CloseWithOrderDialog from '@/components/deals/CloseWithOrderDialog'
-import DealHistoryTable from '@/components/deals/DealHistoryTable'
+import DealHistoryPanel from '@/components/deals/DealHistoryPanel'
 import DealsRowActions from '@/components/deals/DealsRowActions'
 import {
   Popover,
@@ -971,17 +971,7 @@ export default function DealsPage() {
                                       DCA / Реинвест / Частичное закрытие
                                     </p>
                                   </div>
-                                  {historyEvents.length ? (
-                                    <div className="overflow-x-auto">
-                                      <DealHistoryTable
-                                        events={historyEvents}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <p className="text-sm text-muted-foreground">
-                                      Нет операций по сделке.
-                                    </p>
-                                  )}
+                                  <DealHistoryPanel events={historyEvents} />
                                 </div>
                               </TableCell>
                             </TableRow>
