@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type Cell,
@@ -43,10 +43,9 @@ import {
 } from '@/components/ui/table'
 import { type Deal, type DealStatus } from '@/types/deals'
 import {
-  formatMoneyLike,
-  formatMoneySmart,
-  formatPrice,
-  formatQty,
+  formatMoneyDisplay,
+  formatPriceDisplay,
+  formatQtyDisplay,
 } from '@/lib/format'
 import { useAppTable } from '@/lib/table'
 import { toastError, toastSuccess } from '@/lib/toast'
@@ -112,8 +111,6 @@ function normalizeSymbol(value: string) {
 export default function DealsPage() {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
-  const [notice, setNotice] = useState<string | null>(null)
-  const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [draftFilters, setDraftFilters] =
     useState<FiltersState>(getDefaultFilters())
   const [appliedFilters, setAppliedFilters] =
@@ -136,14 +133,6 @@ export default function DealsPage() {
   } | null>(null)
 
   useEffect(() => {
-    return () => {
-      if (noticeTimeoutRef.current) {
-        clearTimeout(noticeTimeoutRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
     try {
       const saved = localStorage.getItem('deals:stats:open')
       if (saved === '1') {
@@ -164,13 +153,6 @@ export default function DealsPage() {
 
   const showNotice = useCallback((message: string) => {
     toastSuccess(message)
-    setNotice(message)
-    if (noticeTimeoutRef.current) {
-      clearTimeout(noticeTimeoutRef.current)
-    }
-    noticeTimeoutRef.current = setTimeout(() => {
-      setNotice(null)
-    }, 3000)
   }, [])
 
   const queryFilters = useMemo(() => {
@@ -411,7 +393,23 @@ export default function DealsPage() {
         header: 'Направление',
         cell: ({ getValue }: { getValue: () => unknown }) => {
           const value = getValue()
-          return typeof value === 'string' ? value : String(value ?? '')
+          const direction =
+            typeof value === 'string' ? value : String(value ?? '')
+          if (direction === 'LONG') {
+            return (
+              <Badge variant="outline" className="text-emerald-600">
+                Лонг
+              </Badge>
+            )
+          }
+          if (direction === 'SHORT') {
+            return (
+              <Badge variant="outline" className="text-red-600">
+                Шорт
+              </Badge>
+            )
+          }
+          return <Badge variant="outline">{direction}</Badge>
         },
       },
       {
@@ -429,38 +427,40 @@ export default function DealsPage() {
         id: 'entryQuote',
         header: 'Вход (quote)',
         cell: ({ row }: { row: Row<Deal> }) =>
-          formatMoneyLike(row.original.entry?.quote),
+          formatMoneyDisplay(row.original.entry?.quote),
       },
       {
         accessorKey: 'entryAvgPrice',
         header: 'Средняя цена входа',
         cell: ({ row }: { row: Row<Deal> }) =>
-          formatPrice(row.original.entryAvgPrice ?? row.original.entry?.price),
+          formatPriceDisplay(
+            row.original.entryAvgPrice ?? row.original.entry?.price,
+          ),
       },
       {
         accessorKey: 'closedQty',
         header: 'Закрыто (qty)',
         cell: ({ row }: { row: Row<Deal> }) =>
-          formatQty(row.original.closedQty),
+          formatQtyDisplay(row.original.closedQty),
       },
       {
         accessorKey: 'remainingQty',
         header: 'Остаток (qty)',
         cell: ({ row }: { row: Row<Deal> }) =>
-          formatQty(row.original.remainingQty),
+          formatQtyDisplay(row.original.remainingQty),
       },
       {
         id: 'exitQuote',
         header: 'Выход (quote)',
         cell: ({ row }: { row: Row<Deal> }) =>
-          formatMoneyLike(row.original.exit?.quote),
+          formatMoneyDisplay(row.original.exit?.quote),
       },
       {
         accessorKey: 'realizedPnl',
         header: 'PnL',
         cell: ({ row }: { row: Row<Deal> }) => (
           <span className={getSignedClass(row.original.realizedPnl)}>
-            {formatMoneyLike(row.original.realizedPnl)}
+            {formatMoneyDisplay(row.original.realizedPnl)}
           </span>
         ),
       },
@@ -472,7 +472,7 @@ export default function DealsPage() {
           if (deal.realizedPnlAvailable !== undefined) {
             return (
               <span className={getSignedClass(deal.realizedPnlAvailable)}>
-                {formatMoneyLike(deal.realizedPnlAvailable)}
+                {formatMoneyDisplay(deal.realizedPnlAvailable)}
               </span>
             )
           }
@@ -481,13 +481,13 @@ export default function DealsPage() {
               Number(deal.realizedPnl) - Number(deal.profitSpentTotal)
             return (
               <span className={getSignedClass(value)}>
-                {Number.isFinite(value) ? formatMoneyLike(value) : '-'}
+                {Number.isFinite(value) ? formatMoneyDisplay(value) : '-'}
               </span>
             )
           }
           return (
             <span className={getSignedClass(deal.realizedPnl)}>
-              {formatMoneyLike(deal.realizedPnl)}
+              {formatMoneyDisplay(deal.realizedPnl)}
             </span>
           )
         },
@@ -546,6 +546,18 @@ export default function DealsPage() {
   const statsError =
     statsQuery.error instanceof Error ? statsQuery.error.message : null
 
+  useEffect(() => {
+    if (dealsQuery.error instanceof Error) {
+      toastError(`Ошибка загрузки сделок: ${dealsQuery.error.message}`)
+    }
+  }, [dealsQuery.error])
+
+  useEffect(() => {
+    if (statsError) {
+      toastError(`Ошибка статистики: ${statsError}`)
+    }
+  }, [statsError])
+
   const selectedCount = selectedIds.size
   const table = useAppTable({
     data,
@@ -579,7 +591,7 @@ export default function DealsPage() {
                     <span className={getSignedClass(stats?.profitAvailable)}>
                       {statsLoading
                         ? '...'
-                        : formatMoneySmart(stats?.profitAvailable ?? '0')}
+                        : formatMoneyDisplay(stats?.profitAvailable ?? '0')}
                     </span>
                   </span>
                   <span>
@@ -587,7 +599,7 @@ export default function DealsPage() {
                     <span className={getSignedClass(stats?.totalPnL)}>
                       {statsLoading
                         ? '...'
-                        : formatMoneySmart(stats?.totalPnL ?? '0')}
+                        : formatMoneyDisplay(stats?.totalPnL ?? '0')}
                     </span>
                   </span>
                 </div>
@@ -619,7 +631,7 @@ export default function DealsPage() {
                   >
                     {statsLoading
                       ? 'Загрузка...'
-                      : formatMoneySmart(stats?.profitAvailable ?? '0')}
+                      : formatMoneyDisplay(stats?.profitAvailable ?? '0')}
                   </p>
                 </div>
                 <div>
@@ -634,7 +646,7 @@ export default function DealsPage() {
                   >
                     {statsLoading
                       ? 'Загрузка...'
-                      : formatMoneySmart(stats?.totalRealizedPnl ?? '0')}
+                      : formatMoneyDisplay(stats?.totalRealizedPnl ?? '0')}
                   </p>
                 </div>
                 <div>
@@ -644,7 +656,7 @@ export default function DealsPage() {
                   <p className="text-sm font-semibold text-muted-foreground">
                     {statsLoading
                       ? 'Загрузка...'
-                      : formatMoneySmart(stats?.totalProfitSpent ?? '0')}
+                      : formatMoneyDisplay(stats?.totalProfitSpent ?? '0')}
                   </p>
                 </div>
                 <div>
@@ -657,7 +669,7 @@ export default function DealsPage() {
                   >
                     {statsLoading
                       ? 'Загрузка...'
-                      : formatMoneySmart(stats?.totalPnL ?? '0')}
+                      : formatMoneyDisplay(stats?.totalPnL ?? '0')}
                   </p>
                 </div>
                 <div>
@@ -665,7 +677,7 @@ export default function DealsPage() {
                   <p className="text-sm font-semibold text-muted-foreground">
                     {statsLoading
                       ? 'Загрузка...'
-                      : formatMoneySmart(stats?.feesTotal ?? '0')}
+                      : formatMoneyDisplay(stats?.feesTotal ?? '0')}
                   </p>
                 </div>
                 <div>
@@ -677,9 +689,6 @@ export default function DealsPage() {
                   </p>
                 </div>
               </div>
-              {statsError && (
-                <p className="text-sm text-destructive">{statsError}</p>
-              )}
             </CardContent>
           </CollapsibleContent>
         </Collapsible>
@@ -835,20 +844,9 @@ export default function DealsPage() {
             </div>
           )}
 
-          {notice && (
-            <p className="text-sm text-emerald-600" role="status">
-              {notice}
-            </p>
-          )}
           {dealsQuery.isLoading && (
             <p className="text-sm text-muted-foreground">Загрузка сделок...</p>
           )}
-          {dealsQuery.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {dealsQuery.error.message}
-            </p>
-          )}
-
           {!dealsQuery.isLoading && (
             <div className="w-full overflow-x-auto rounded-md border border-border">
               <Table className="min-w-[1200px]">
@@ -974,11 +972,6 @@ export default function DealsPage() {
               Будет удалено: {selectedCount}. Это действие нельзя отменить.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {bulkDeleteMutation.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {bulkDeleteMutation.error.message}
-            </p>
-          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={bulkDeleteMutation.isPending}>
               Отмена

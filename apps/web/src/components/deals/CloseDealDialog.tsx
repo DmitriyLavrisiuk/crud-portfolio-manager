@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { toastError } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
 import { closeDealSchema, type CloseDealFormValues } from '@/validation/deals'
 
@@ -83,6 +84,13 @@ export default function CloseDealDialog({
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
       onSuccess?.('Сделка закрыта')
+    },
+    onError: (error) => {
+      if (error instanceof Error) {
+        toastError(`Ошибка закрытия: ${error.message}`)
+        return
+      }
+      toastError('Ошибка закрытия: неизвестная ошибка')
     },
   })
 
@@ -163,12 +171,6 @@ export default function CloseDealDialog({
               />
             </div>
           </div>
-
-          {closeMutation.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {closeMutation.error.message}
-            </p>
-          )}
 
           <div className="flex justify-end">
             <Button type="submit" disabled={closeMutation.isPending}>

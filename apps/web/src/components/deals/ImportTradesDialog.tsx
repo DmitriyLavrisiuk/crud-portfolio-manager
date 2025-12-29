@@ -20,7 +20,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { type Deal, type ImportTradesResponse } from '@/types/deals'
-import { formatMoneyLike, formatPrice, formatQty } from '@/lib/format'
+import {
+  formatMoneyDisplay,
+  formatPriceDisplay,
+  formatQtyDisplay,
+} from '@/lib/format'
+import { toastError } from '@/lib/toast'
 
 type ImportTradesDialogProps = {
   open: boolean
@@ -44,7 +49,6 @@ export default function ImportTradesDialog({
   const [hasLoaded, setHasLoaded] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     if (!open) return
     setOrderId('')
@@ -52,14 +56,13 @@ export default function ImportTradesDialog({
     setHasLoaded(false)
     setIsLoading(false)
     setIsApplying(false)
-    setError(null)
   }, [open, deal.id, phase])
   const aggregate = preview?.aggregate
   const previewRows = preview?.preview ?? []
   const parseOrderId = () => {
     const value = Number(orderId)
     if (!Number.isFinite(value) || value <= 0) {
-      setError('Нужно указать Order ID')
+      toastError('Нужно указать Order ID')
       return null
     }
     return value
@@ -67,7 +70,6 @@ export default function ImportTradesDialog({
   const handleLoadPreview = async () => {
     const parsedOrderId = parseOrderId()
     if (!parsedOrderId) return
-    setError(null)
     setIsLoading(true)
     try {
       const result = await importDealTrades(
@@ -78,8 +80,10 @@ export default function ImportTradesDialog({
       setPreview(result)
       setHasLoaded(true)
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Не удалось загрузить превью',
+      toastError(
+        `Ошибка превью: ${
+          err instanceof Error ? err.message : 'Не удалось загрузить превью'
+        }`,
       )
     } finally {
       setIsLoading(false)
@@ -88,7 +92,6 @@ export default function ImportTradesDialog({
   const handleApply = async () => {
     const parsedOrderId = parseOrderId()
     if (!parsedOrderId) return
-    setError(null)
     setIsApplying(true)
     try {
       const result = await importDealTrades(
@@ -103,7 +106,11 @@ export default function ImportTradesDialog({
         `Импортировано сделок: ${result.importedCount} (${phase === 'ENTRY' ? 'вход' : 'выход'})`,
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось импортировать')
+      toastError(
+        `Ошибка импорта: ${
+          err instanceof Error ? err.message : 'Не удалось импортировать'
+        }`,
+      )
     } finally {
       setIsApplying(false)
     }
@@ -140,7 +147,6 @@ export default function ImportTradesDialog({
               {isLoading ? 'Загрузка...' : 'Показать превью'}
             </Button>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="space-y-2">
             <p className="text-sm font-semibold">Превью</p>
             {previewRows.length === 0 ? (
@@ -166,12 +172,14 @@ export default function ImportTradesDialog({
                           {new Date(trade.time).toLocaleString()}
                         </TableCell>
                         <TableCell>{trade.isBuyer ? 'BUY' : 'SELL'}</TableCell>
-                        <TableCell>{formatPrice(trade.price)}</TableCell>
-                        <TableCell>{formatQty(trade.qty)}</TableCell>
-                        <TableCell>{formatMoneyLike(trade.quoteQty)}</TableCell>
+                        <TableCell>{formatPriceDisplay(trade.price)}</TableCell>
+                        <TableCell>{formatQtyDisplay(trade.qty)}</TableCell>
+                        <TableCell>
+                          {formatMoneyDisplay(trade.quoteQty)}
+                        </TableCell>
                         <TableCell>{trade.commissionAsset}</TableCell>
                         <TableCell>
-                          {formatMoneyLike(trade.commission)}
+                          {formatMoneyDisplay(trade.commission)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -186,26 +194,26 @@ export default function ImportTradesDialog({
               <div>
                 <p className="text-xs text-muted-foreground">Количество</p>
                 <p className="text-sm font-medium">
-                  {formatQty(aggregate?.qty)}
+                  {formatQtyDisplay(aggregate?.qty)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Средняя цена</p>
                 <p className="text-sm font-medium">
-                  {formatPrice(aggregate?.price)}
+                  {formatPriceDisplay(aggregate?.price)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Quote</p>
                 <p className="text-sm font-medium">
-                  {formatMoneyLike(aggregate?.quote)}
+                  {formatMoneyDisplay(aggregate?.quote)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Комиссия</p>
                 <p className="text-sm font-medium">
                   {aggregate?.fee
-                    ? `${formatMoneyLike(aggregate.fee)} ${aggregate.feeAsset ?? ''}`.trim()
+                    ? `${formatMoneyDisplay(aggregate.fee)} ${aggregate.feeAsset ?? ''}`.trim()
                     : '-'}
                 </p>
               </div>

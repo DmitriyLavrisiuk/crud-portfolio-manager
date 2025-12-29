@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { toastError } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
 import {
   addEntryLegSchema,
@@ -91,6 +92,13 @@ export default function AddEntryLegDialog({
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
       onSuccess?.('Вход добавлен')
+    },
+    onError: (error) => {
+      if (error instanceof Error) {
+        toastError(`Ошибка добавления входа: ${error.message}`)
+        return
+      }
+      toastError('Ошибка добавления входа: неизвестная ошибка')
     },
   })
 
@@ -180,12 +188,6 @@ export default function AddEntryLegDialog({
               )}
             </div>
           </div>
-
-          {addMutation.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {addMutation.error.message}
-            </p>
-          )}
 
           <div className="flex justify-end">
             <Button type="submit" disabled={addMutation.isPending}>

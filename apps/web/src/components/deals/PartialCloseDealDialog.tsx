@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { toastError } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
 import {
   partialCloseDealSchema,
@@ -91,6 +92,13 @@ export default function PartialCloseDealDialog({
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
       onSuccess?.('Сделка частично закрыта')
+    },
+    onError: (error) => {
+      if (error instanceof Error) {
+        toastError(`Ошибка частичного закрытия: ${error.message}`)
+        return
+      }
+      toastError('Ошибка частичного закрытия: неизвестная ошибка')
     },
   })
 
@@ -182,12 +190,6 @@ export default function PartialCloseDealDialog({
               )}
             </div>
           </div>
-
-          {closeMutation.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {closeMutation.error.message}
-            </p>
-          )}
 
           <div className="flex justify-end">
             <Button type="submit" disabled={closeMutation.isPending}>

@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { toastError } from '@/lib/toast'
 import { createDealSchema, type CreateDealFormValues } from '@/validation/deals'
 
 type CreateDealDialogProps = {
@@ -88,6 +89,13 @@ export default function CreateDealDialog({
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
       onSuccess?.('Сделка создана')
+    },
+    onError: (error) => {
+      if (error instanceof Error) {
+        toastError(`Ошибка создания: ${error.message}`)
+        return
+      }
+      toastError('Ошибка создания: неизвестная ошибка')
     },
   })
 
@@ -208,12 +216,6 @@ export default function CreateDealDialog({
               )}
             </div>
           </div>
-
-          {createMutation.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {createMutation.error.message}
-            </p>
-          )}
 
           <div className="flex justify-end">
             <Button type="submit" disabled={createMutation.isPending}>

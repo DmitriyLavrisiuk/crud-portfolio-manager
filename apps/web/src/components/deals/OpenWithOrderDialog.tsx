@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { type DealsListFilters } from '@/api/dealsApi'
+import { toastError, toastWarning } from '@/lib/toast'
 import {
   openWithOrderSchema,
   type OpenWithOrderFormValues,
@@ -51,8 +52,6 @@ export default function OpenWithOrderDialog({
 }: OpenWithOrderDialogProps) {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
-  const [warning, setWarning] = useState<string | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const form = useForm<OpenWithOrderFormValues>({
     resolver: zodResolver(openWithOrderSchema),
@@ -68,8 +67,6 @@ export default function OpenWithOrderDialog({
   useEffect(() => {
     if (!open) return
     form.reset(defaultValues)
-    setWarning(null)
-    setErrorMessage(null)
   }, [open, form])
 
   const dealsQueryKey = useMemo(() => ['deals', queryFilters], [queryFilters])
@@ -113,14 +110,12 @@ export default function OpenWithOrderDialog({
         data?.statusCode === 409 &&
         message.toLowerCase().includes('no fills')
       ) {
-        setWarning(
+        toastWarning(
           'Ордер создан, но fills ещё не доступны. Попробуй ещё раз через 2–5 сек.',
         )
-        setErrorMessage(null)
         return
       }
-      setWarning(null)
-      setErrorMessage(message)
+      toastError(`Ошибка открытия: ${message}`)
     },
   })
 
@@ -246,17 +241,6 @@ export default function OpenWithOrderDialog({
               )}
             </div>
           </div>
-
-          {warning && (
-            <p className="text-sm text-amber-600" role="alert">
-              {warning}
-            </p>
-          )}
-          {errorMessage && (
-            <p className="text-sm text-destructive" role="alert">
-              {errorMessage}
-            </p>
-          )}
 
           <div className="flex justify-end">
             <Button

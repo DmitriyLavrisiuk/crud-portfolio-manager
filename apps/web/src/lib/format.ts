@@ -3,6 +3,8 @@ type FormatOptions = {
   minFrac?: number
 }
 
+export type NumberDisplayContext = 'price' | 'qty' | 'money' | 'pnl' | 'percent'
+
 const addGrouping = (value: string) =>
   value.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
 
@@ -49,6 +51,68 @@ export const formatMoneySmart = (value?: string | number) => {
   }
   const abs = Math.abs(raw)
   return formatNum(value, { maxFrac: abs >= 1000 ? 0 : 2 })
+}
+
+const getAbs = (value?: string | number) => {
+  if (value === undefined || value === null) return null
+  const numeric = Number(value)
+  if (Number.isNaN(numeric)) return null
+  return Math.abs(numeric)
+}
+
+export const formatMoneyDisplay = (value?: string | number) => {
+  const abs = getAbs(value)
+  if (abs === null) return formatNum(value, { maxFrac: 2 })
+  if (abs >= 1000) return formatNum(value, { maxFrac: 0 })
+  if (abs >= 1) return formatNum(value, { maxFrac: 2 })
+  return formatNum(value, { maxFrac: 4 })
+}
+
+export const formatPriceDisplay = (value?: string | number) => {
+  const abs = getAbs(value)
+  if (abs === null) return formatNum(value, { maxFrac: 2 })
+  if (abs >= 1000) return formatNum(value, { maxFrac: 0 })
+  if (abs >= 1) return formatNum(value, { maxFrac: 2 })
+  if (abs >= 0.01) return formatNum(value, { maxFrac: 4 })
+  if (abs >= 0.0001) return formatNum(value, { maxFrac: 6 })
+  return formatNum(value, { maxFrac: 8 })
+}
+
+export const formatQtyDisplay = (value?: string | number) => {
+  const abs = getAbs(value)
+  if (abs === null) return formatNum(value, { maxFrac: 6 })
+  if (abs >= 1) return formatNum(value, { maxFrac: 4 })
+  if (abs >= 0.01) return formatNum(value, { maxFrac: 6 })
+  return formatNum(value, { maxFrac: 8 })
+}
+
+export const formatNumberDisplay = (
+  value: string | number | undefined,
+  ctx: NumberDisplayContext,
+) => {
+  switch (ctx) {
+    case 'price':
+      return formatPriceDisplay(value)
+    case 'qty':
+      return formatQtyDisplay(value)
+    case 'money':
+    case 'pnl':
+      return formatMoneyDisplay(value)
+    case 'percent':
+      return formatNum(value, { maxFrac: 2 })
+    default:
+      return formatNum(value, { maxFrac: 4 })
+  }
+}
+
+export const formatInputValue = (
+  value: string | number | undefined,
+  ctx: NumberDisplayContext,
+) => {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'string') return value.trim()
+  const maxFrac = ctx === 'price' || ctx === 'qty' ? 4 : 2
+  return formatNum(value, { maxFrac })
 }
 
 export const formatQty = (value?: string | number) =>

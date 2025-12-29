@@ -15,7 +15,12 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { type Deal } from '@/types/deals'
-import { formatMoneyLike, formatPrice, formatQty } from '@/lib/format'
+import {
+  formatMoneyDisplay,
+  formatPriceDisplay,
+  formatQtyDisplay,
+} from '@/lib/format'
+import { toastError } from '@/lib/toast'
 import {
   profitToPositionSchema,
   type ProfitToPositionFormValues,
@@ -87,6 +92,13 @@ export default function ProfitToPositionDialog({
       onOpenChange(false)
       onSuccess?.('Прибыль реинвестирована')
     },
+    onError: (error) => {
+      if (error instanceof Error) {
+        toastError(`Ошибка реинвеста: ${error.message}`)
+        return
+      }
+      toastError('Ошибка реинвеста: неизвестная ошибка')
+    },
   })
 
   return (
@@ -104,7 +116,7 @@ export default function ProfitToPositionDialog({
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">
               Доступная прибыль (все сделки):{' '}
-              {formatMoneyLike(resolvedAvailable)}
+              {formatMoneyDisplay(resolvedAvailable)}
             </p>
             <p className="text-xs text-muted-foreground">
               Сумма будет учтена как новый вход (DCA) без отправки ордера.
@@ -161,7 +173,7 @@ export default function ProfitToPositionDialog({
             <div className="space-y-1 md:col-span-2">
               <p className="text-xs text-muted-foreground">
                 Примерный объём:{' '}
-                {formatQty(
+                {formatQtyDisplay(
                   Number(form.watch('amount')) && Number(form.watch('price'))
                     ? String(
                         Number(form.watch('amount')) /
@@ -171,16 +183,10 @@ export default function ProfitToPositionDialog({
                 )}
               </p>
               <p className="text-xs text-muted-foreground">
-                Оценка цены: {formatPrice(form.watch('price'))}
+                Оценка цены: {formatPriceDisplay(form.watch('price'))}
               </p>
             </div>
           </div>
-
-          {profitMutation.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {profitMutation.error.message}
-            </p>
-          )}
 
           <div className="flex justify-end">
             <Button type="submit" disabled={profitMutation.isPending}>

@@ -71,12 +71,6 @@ export default function DeleteDealDialog({
             Это действие нельзя отменить.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        {deleteMutation.error instanceof Error &&
-          deleteMutation.error.message !== 'MISSING_DEAL' && (
-            <p className="text-sm text-destructive">
-              {deleteMutation.error.message}
-            </p>
-          )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleteMutation.isPending}>
             Отмена

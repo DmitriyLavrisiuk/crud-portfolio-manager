@@ -21,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatInputValue } from '@/lib/format'
+import { toastError } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
 import { editDealSchema, type EditDealFormValues } from '@/validation/deals'
 
@@ -70,9 +72,9 @@ export default function EditDealDialog({
       direction: deal.direction,
       openedAt: formatDateInput(deal.openedAt),
       entry: {
-        qty: deal.entry.qty,
-        price: deal.entry.price,
-        fee: deal.entry.fee ?? '',
+        qty: formatInputValue(deal.entry.qty, 'qty'),
+        price: formatInputValue(deal.entry.price, 'price'),
+        fee: deal.entry.fee ? formatInputValue(deal.entry.fee, 'money') : '',
         feeAsset: deal.entry.feeAsset ?? '',
       },
       note: deal.note ?? '',
@@ -106,6 +108,13 @@ export default function EditDealDialog({
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
       onSuccess?.('Сделка обновлена')
+    },
+    onError: (error) => {
+      if (error instanceof Error) {
+        toastError(`Ошибка обновления: ${error.message}`)
+        return
+      }
+      toastError('Ошибка обновления: неизвестная ошибка')
     },
   })
 
@@ -226,12 +235,6 @@ export default function EditDealDialog({
               )}
             </div>
           </div>
-
-          {updateMutation.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {updateMutation.error.message}
-            </p>
-          )}
 
           <div className="flex justify-end">
             <Button type="submit" disabled={updateMutation.isPending}>

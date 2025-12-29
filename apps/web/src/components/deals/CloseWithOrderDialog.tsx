@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -21,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatInputValue } from '@/lib/format'
+import { toastError, toastWarning } from '@/lib/toast'
 import { type Deal } from '@/types/deals'
 import {
   closeWithOrderSchema,
@@ -47,8 +49,6 @@ export default function CloseWithOrderDialog({
 }: CloseWithOrderDialogProps) {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
-  const [warning, setWarning] = useState<string | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const closeSide = getCloseSide(deal)
 
   const form = useForm<CloseWithOrderFormValues>({
@@ -56,7 +56,7 @@ export default function CloseWithOrderDialog({
     defaultValues: {
       closeSide,
       marketBuyMode: closeSide === 'BUY' ? 'BASE' : undefined,
-      quantity: deal.entry?.qty ?? '',
+      quantity: deal.entry?.qty ? formatInputValue(deal.entry.qty, 'qty') : '',
       quoteOrderQty: '',
       note: '',
     },
@@ -70,12 +70,10 @@ export default function CloseWithOrderDialog({
     form.reset({
       closeSide,
       marketBuyMode: closeSide === 'BUY' ? 'BASE' : undefined,
-      quantity: deal.entry?.qty ?? '',
+      quantity: deal.entry?.qty ? formatInputValue(deal.entry.qty, 'qty') : '',
       quoteOrderQty: '',
       note: '',
     })
-    setWarning(null)
-    setErrorMessage(null)
   }, [open, form, closeSide, deal.entry?.qty])
 
   const dealsQueryKey = useMemo(() => ['deals', queryFilters], [queryFilters])
@@ -117,12 +115,10 @@ export default function CloseWithOrderDialog({
         data?.statusCode === 409 &&
         message.toLowerCase().includes('no fills')
       ) {
-        setWarning('fills ещё не доступны, попробуй позже')
-        setErrorMessage(null)
+        toastWarning('fills ещё не доступны, попробуй позже')
         return
       }
-      setWarning(null)
-      setErrorMessage(message)
+      toastError(`Ошибка закрытия: ${message}`)
     },
   })
 
@@ -210,17 +206,6 @@ export default function CloseWithOrderDialog({
               )}
             </div>
           </div>
-
-          {warning && (
-            <p className="text-sm text-amber-600" role="alert">
-              {warning}
-            </p>
-          )}
-          {errorMessage && (
-            <p className="text-sm text-destructive" role="alert">
-              {errorMessage}
-            </p>
-          )}
 
           <div className="flex justify-end">
             <Button
