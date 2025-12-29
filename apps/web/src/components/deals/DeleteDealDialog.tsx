@@ -13,10 +13,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { type Deal } from '@/types/deals'
-
 type DeleteDealDialogProps = {
-  deal: Deal | null
+  dealId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: (message: string) => void
@@ -24,7 +22,7 @@ type DeleteDealDialogProps = {
 }
 
 export default function DeleteDealDialog({
-  deal,
+  dealId,
   open,
   onOpenChange,
   onSuccess,
@@ -35,11 +33,11 @@ export default function DeleteDealDialog({
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      if (!deal) {
+      if (!dealId) {
         onOpenChange(false)
         throw new Error('MISSING_DEAL')
       }
-      return deleteDeal(deal.id, {
+      return deleteDeal(dealId, {
         accessToken,
         onUnauthorized: refresh,
       })

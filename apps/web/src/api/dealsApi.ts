@@ -129,11 +129,21 @@ function buildQuery(filters: DealsListFilters) {
 }
 
 export async function fetchDeals(filters: DealsListFilters, auth: AuthOptions) {
-  return apiFetch<DealsListResponse>(`/deals${buildQuery(filters)}`, {
-    method: 'GET',
-    accessToken: auth.accessToken,
-    onUnauthorized: auth.onUnauthorized,
-  })
+  const result = await apiFetch<DealsListResponse>(
+    `/deals${buildQuery(filters)}`,
+    {
+      method: 'GET',
+      accessToken: auth.accessToken,
+      onUnauthorized: auth.onUnauthorized,
+    },
+  )
+  return {
+    ...result,
+    items: result.items.map((deal) => ({
+      ...deal,
+      id: deal.id || deal._id || '',
+    })),
+  }
 }
 
 export async function createDeal(

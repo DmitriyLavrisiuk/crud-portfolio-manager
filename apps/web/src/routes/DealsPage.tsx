@@ -52,7 +52,6 @@ import CloseDealDialog from '@/components/deals/CloseDealDialog'
 import PartialCloseDealDialog from '@/components/deals/PartialCloseDealDialog'
 import AddEntryLegDialog from '@/components/deals/AddEntryLegDialog'
 import ProfitToPositionDialog from '@/components/deals/ProfitToPositionDialog'
-import DeleteDealDialog from '@/components/deals/DeleteDealDialog'
 import ImportTradesDialog from '@/components/deals/ImportTradesDialog'
 import OpenWithOrderDialog from '@/components/deals/OpenWithOrderDialog'
 import CloseWithOrderDialog from '@/components/deals/CloseWithOrderDialog'
@@ -123,7 +122,6 @@ export default function DealsPage() {
   const [addingEntry, setAddingEntry] = useState<Deal | null>(null)
   const [profitToPosition, setProfitToPosition] = useState<Deal | null>(null)
   const [closingWithOrder, setClosingWithOrder] = useState<Deal | null>(null)
-  const [deleting, setDeleting] = useState<Deal | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [importing, setImporting] = useState<{
@@ -224,10 +222,6 @@ export default function DealsPage() {
 
   const handleCloseWithOrder = useCallback((deal: Deal) => {
     setClosingWithOrder(deal)
-  }, [])
-
-  const handleDelete = useCallback((deal: Deal) => {
-    setDeleting(deal)
   }, [])
 
   const handleImport = useCallback((deal: Deal, phase: 'ENTRY' | 'EXIT') => {
@@ -492,7 +486,16 @@ export default function DealsPage() {
             onPartialClose={handlePartialClose}
             onClose={handleClose}
             onCloseWithOrder={handleCloseWithOrder}
-            onDelete={handleDelete}
+            onDeleted={(id) =>
+              setSelectedIds((prev) => {
+                if (!prev.has(id)) {
+                  return prev
+                }
+                const next = new Set(prev)
+                next.delete(id)
+                return next
+              })
+            }
           />
         ),
         meta: {
@@ -510,11 +513,11 @@ export default function DealsPage() {
       handleProfitToPosition,
       handlePartialClose,
       handleCloseWithOrder,
-      handleDelete,
       handleImport,
       data,
       selectedIds,
       getSignedClass,
+      setSelectedIds,
     ],
   )
 
@@ -890,22 +893,6 @@ export default function DealsPage() {
           queryFilters={queryFilters}
         />
       )}
-      <DeleteDealDialog
-        deal={deleting}
-        open={Boolean(deleting)}
-        onOpenChange={(open) => (!open ? setDeleting(null) : null)}
-        onSuccess={showNotice}
-        onDeleted={(id) =>
-          setSelectedIds((prev) => {
-            if (!prev.has(id)) {
-              return prev
-            }
-            const next = new Set(prev)
-            next.delete(id)
-            return next
-          })
-        }
-      />
       <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
