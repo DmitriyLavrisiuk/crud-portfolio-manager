@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+  type Cell,
   type ColumnDef,
   flexRender,
-  getCoreRowModel,
-  useReactTable,
+  type Header,
+  type HeaderGroup,
+  type Row,
 } from '@tanstack/react-table'
 import { format } from 'date-fns'
 
@@ -37,6 +39,7 @@ import {
   formatPrice,
   formatQty,
 } from '@/lib/format'
+import { useAppTable } from '@/lib/table'
 import { cn } from '@/lib/utils'
 import CreateDealDialog from '@/components/deals/CreateDealDialog'
 import EditDealDialog from '@/components/deals/EditDealDialog'
@@ -202,7 +205,7 @@ export default function DealsPage() {
       {
         id: 'rowNumber',
         header: '#',
-        cell: ({ row }) => (
+        cell: ({ row }: { row: Row<Deal> }) => (
           <span className="font-mono text-xs text-muted-foreground">
             {row.index + 1}
           </span>
@@ -216,7 +219,7 @@ export default function DealsPage() {
       {
         accessorKey: 'openedAt',
         header: 'Открыта',
-        cell: ({ row }) =>
+        cell: ({ row }: { row: Row<Deal> }) =>
           row.original.openedAt
             ? new Date(row.original.openedAt).toLocaleDateString()
             : '-',
@@ -229,7 +232,10 @@ export default function DealsPage() {
       {
         accessorKey: 'symbol',
         header: 'Символ',
-        cell: ({ getValue }) => getValue(),
+        cell: ({ getValue }: { getValue: () => unknown }) => {
+          const value = getValue()
+          return typeof value === 'string' ? value : String(value ?? '')
+        },
         meta: {
           headerClassName: 'sticky left-[9.5rem] z-30 bg-background text-xs',
           cellClassName: 'sticky left-[9.5rem] z-20 bg-background',
@@ -239,12 +245,16 @@ export default function DealsPage() {
       {
         accessorKey: 'direction',
         header: 'Направление',
-        cell: ({ getValue }) => getValue(),
+        cell: ({ getValue }: { getValue: () => unknown }) => {
+          const value = getValue()
+          return typeof value === 'string' ? value : String(value ?? '')
+        },
       },
       {
         accessorKey: 'status',
         header: 'Статус',
-        cell: ({ getValue }) => (getValue() === 'OPEN' ? 'ОТКРЫТА' : 'ЗАКРЫТА'),
+        cell: ({ getValue }: { getValue: () => unknown }) =>
+          getValue() === 'OPEN' ? 'ОТКРЫТА' : 'ЗАКРЫТА',
         meta: {
           headerClassName: 'sticky left-[15.5rem] z-30 bg-background text-xs',
           cellClassName: 'sticky left-[15.5rem] z-20 bg-background',
@@ -254,38 +264,43 @@ export default function DealsPage() {
       {
         id: 'entryQuote',
         header: 'Вход (quote)',
-        cell: ({ row }) => formatMoneyLike(row.original.entry?.quote),
+        cell: ({ row }: { row: Row<Deal> }) =>
+          formatMoneyLike(row.original.entry?.quote),
       },
       {
         accessorKey: 'entryAvgPrice',
         header: 'Средняя цена входа',
-        cell: ({ row }) =>
+        cell: ({ row }: { row: Row<Deal> }) =>
           formatPrice(row.original.entryAvgPrice ?? row.original.entry?.price),
       },
       {
         accessorKey: 'closedQty',
         header: 'Закрыто (qty)',
-        cell: ({ row }) => formatQty(row.original.closedQty),
+        cell: ({ row }: { row: Row<Deal> }) =>
+          formatQty(row.original.closedQty),
       },
       {
         accessorKey: 'remainingQty',
         header: 'Остаток (qty)',
-        cell: ({ row }) => formatQty(row.original.remainingQty),
+        cell: ({ row }: { row: Row<Deal> }) =>
+          formatQty(row.original.remainingQty),
       },
       {
         id: 'exitQuote',
         header: 'Выход (quote)',
-        cell: ({ row }) => formatMoneyLike(row.original.exit?.quote),
+        cell: ({ row }: { row: Row<Deal> }) =>
+          formatMoneyLike(row.original.exit?.quote),
       },
       {
         accessorKey: 'realizedPnl',
         header: 'PnL',
-        cell: ({ row }) => formatMoneyLike(row.original.realizedPnl),
+        cell: ({ row }: { row: Row<Deal> }) =>
+          formatMoneyLike(row.original.realizedPnl),
       },
       {
         accessorKey: 'realizedPnlAvailable',
         header: 'Доступная прибыль',
-        cell: ({ row }) => {
+        cell: ({ row }: { row: Row<Deal> }) => {
           const deal = row.original
           if (deal.realizedPnlAvailable !== undefined) {
             return formatMoneyLike(deal.realizedPnlAvailable)
@@ -301,7 +316,7 @@ export default function DealsPage() {
       {
         id: 'actions',
         header: 'Действия',
-        cell: ({ row }) => (
+        cell: ({ row }: { row: Row<Deal> }) => (
           <DealsRowActions
             deal={row.original}
             onImportEntry={(deal) => handleImport(deal, 'ENTRY')}
@@ -340,10 +355,9 @@ export default function DealsPage() {
   const statsError =
     statsQuery.error instanceof Error ? statsQuery.error.message : null
 
-  const table = useReactTable({
+  const table = useAppTable({
     data,
     columns,
-    getCoreRowModel: getCoreRowModel(),
   })
 
   const handleApply = () => {
@@ -465,7 +479,7 @@ export default function DealsPage() {
                   <Calendar
                     mode="single"
                     selected={draftFilters.from ?? undefined}
-                    onSelect={(date) =>
+                    onSelect={(date: Date | undefined) =>
                       setDraftFilters((prev) => ({
                         ...prev,
                         from: date ?? null,
@@ -496,8 +510,11 @@ export default function DealsPage() {
                   <Calendar
                     mode="single"
                     selected={draftFilters.to ?? undefined}
-                    onSelect={(date) =>
-                      setDraftFilters((prev) => ({ ...prev, to: date ?? null }))
+                    onSelect={(date: Date | undefined) =>
+                      setDraftFilters((prev) => ({
+                        ...prev,
+                        to: date ?? null,
+                      }))
                     }
                     initialFocus
                   />
@@ -574,47 +591,53 @@ export default function DealsPage() {
             <div className="w-full overflow-x-auto rounded-md border border-border">
               <Table className="min-w-[1200px]">
                 <TableHeader>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead
-                          key={header.id}
-                          className={cn(
-                            'px-3 py-2 text-xs font-medium text-muted-foreground',
-                            header.column.columnDef.meta?.headerClassName,
-                            header.column.columnDef.meta?.sizeClassName,
-                          )}
-                        >
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
+                  {table
+                    .getHeaderGroups()
+                    .map((headerGroup: HeaderGroup<Deal>) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map(
+                          (header: Header<Deal, unknown>) => (
+                            <TableHead
+                              key={header.id}
+                              className={cn(
+                                'px-3 py-2 text-xs font-medium text-muted-foreground',
+                                header.column.columnDef.meta?.headerClassName,
+                                header.column.columnDef.meta?.sizeClassName,
                               )}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  ))}
+                            >
+                              {header.isPlaceholder
+                                ? null
+                                : flexRender(
+                                    header.column.columnDef.header,
+                                    header.getContext(),
+                                  )}
+                            </TableHead>
+                          ),
+                        )}
+                      </TableRow>
+                    ))}
                 </TableHeader>
                 <TableBody>
                   {table.getRowModel().rows.length ? (
-                    table.getRowModel().rows.map((row) => (
+                    table.getRowModel().rows.map((row: Row<Deal>) => (
                       <TableRow key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell
-                            key={cell.id}
-                            className={cn(
-                              'px-3 py-2 text-sm',
-                              cell.column.columnDef.meta?.cellClassName,
-                              cell.column.columnDef.meta?.sizeClassName,
-                            )}
-                          >
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </TableCell>
-                        ))}
+                        {row
+                          .getVisibleCells()
+                          .map((cell: Cell<Deal, unknown>) => (
+                            <TableCell
+                              key={cell.id}
+                              className={cn(
+                                'px-3 py-2 text-sm',
+                                cell.column.columnDef.meta?.cellClassName,
+                                cell.column.columnDef.meta?.sizeClassName,
+                              )}
+                            >
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
+                              )}
+                            </TableCell>
+                          ))}
                       </TableRow>
                     ))
                   ) : (
