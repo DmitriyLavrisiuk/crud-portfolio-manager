@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useAuth } from '@/auth/AuthProvider'
 import { deleteDeal } from '@/api/dealsApi'
+import { toastError } from '@/lib/toast'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +36,8 @@ export default function DeleteDealDialog({
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!deal) {
-        throw new Error('No deal selected')
+        onOpenChange(false)
+        throw new Error('MISSING_DEAL')
       }
       return deleteDeal(deal.id, {
         accessToken,
@@ -49,6 +51,17 @@ export default function DeleteDealDialog({
       onDeleted?.(result.id)
       onSuccess?.('Сделка удалена')
     },
+    onError: (error) => {
+      if (!(error instanceof Error)) {
+        toastError('Ошибка удаления: неизвестная ошибка')
+        return
+      }
+      if (error.message === 'MISSING_DEAL') {
+        toastError('Не удалось определить сделку для удаления')
+        return
+      }
+      toastError(`Ошибка удаления: ${error.message}`)
+    },
   })
 
   return (
@@ -60,11 +73,12 @@ export default function DeleteDealDialog({
             Это действие нельзя отменить.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        {deleteMutation.error instanceof Error && (
-          <p className="text-sm text-destructive">
-            {deleteMutation.error.message}
-          </p>
-        )}
+        {deleteMutation.error instanceof Error &&
+          deleteMutation.error.message !== 'MISSING_DEAL' && (
+            <p className="text-sm text-destructive">
+              {deleteMutation.error.message}
+            </p>
+          )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleteMutation.isPending}>
             Отмена

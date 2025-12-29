@@ -44,6 +44,7 @@ import {
   formatQty,
 } from '@/lib/format'
 import { useAppTable } from '@/lib/table'
+import { toastError, toastSuccess } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import CreateDealDialog from '@/components/deals/CreateDealDialog'
 import EditDealDialog from '@/components/deals/EditDealDialog'
@@ -139,6 +140,7 @@ export default function DealsPage() {
   }, [])
 
   const showNotice = useCallback((message: string) => {
+    toastSuccess(message)
     setNotice(message)
     if (noticeTimeoutRef.current) {
       clearTimeout(noticeTimeoutRef.current)
@@ -258,6 +260,13 @@ export default function DealsPage() {
       })
       setBulkDeleteOpen(false)
       showNotice(`Удалено сделок: ${result.deletedCount}`)
+    },
+    onError: (error) => {
+      if (error instanceof Error) {
+        toastError(`Ошибка удаления: ${error.message}`)
+        return
+      }
+      toastError('Ошибка удаления: неизвестная ошибка')
     },
   })
 
