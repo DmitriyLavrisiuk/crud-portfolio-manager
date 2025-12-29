@@ -41,6 +41,16 @@ export const formatNum = (
 export const formatMoneyLike = (value?: string | number) =>
   formatNum(value, { maxFrac: 2 })
 
+export const formatMoneySmart = (value?: string | number) => {
+  if (value === undefined || value === null) return '-'
+  const raw = Number(value)
+  if (Number.isNaN(raw)) {
+    return formatMoneyLike(value)
+  }
+  const abs = Math.abs(raw)
+  return formatNum(value, { maxFrac: abs >= 1000 ? 0 : 2 })
+}
+
 export const formatQty = (value?: string | number) =>
   formatNum(value, { maxFrac: 8 })
 

@@ -9,7 +9,7 @@ import {
   type Row,
 } from '@tanstack/react-table'
 import { format } from 'date-fns'
-import { SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, SlidersHorizontal } from 'lucide-react'
 import type { CheckedState } from '@radix-ui/react-checkbox'
 
 import { useAuth } from '@/auth/AuthProvider'
@@ -19,6 +19,11 @@ import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -39,7 +44,7 @@ import {
 import { type Deal, type DealStatus } from '@/types/deals'
 import {
   formatMoneyLike,
-  formatNum,
+  formatMoneySmart,
   formatPrice,
   formatQty,
 } from '@/lib/format'
@@ -113,6 +118,7 @@ export default function DealsPage() {
     useState<FiltersState>(getDefaultFilters())
   const [appliedFilters, setAppliedFilters] =
     useState<FiltersState>(getDefaultFilters())
+  const [statsOpen, setStatsOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [openWithOrderOpen, setOpenWithOrderOpen] = useState(false)
@@ -136,6 +142,25 @@ export default function DealsPage() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('deals:stats:open')
+      if (saved === '1') {
+        setStatsOpen(true)
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('deals:stats:open', statsOpen ? '1' : '0')
+    } catch {
+      // ignore storage errors
+    }
+  }, [statsOpen])
 
   const showNotice = useCallback((message: string) => {
     toastSuccess(message)
@@ -263,11 +288,6 @@ export default function DealsPage() {
       toastError('Ошибка удаления: неизвестная ошибка')
     },
   })
-
-  const formatWinRate = useCallback((value?: number) => {
-    if (value === undefined || Number.isNaN(value)) return '0%'
-    return `${formatNum(value, { maxFrac: 2 })}%`
-  }, [])
 
   const getSignedClass = useCallback((value?: string | number) => {
     if (value === undefined || value === null) {
@@ -548,68 +568,121 @@ export default function DealsPage() {
   return (
     <section className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Статистика</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Общий PnL</p>
-              <p className="text-lg font-semibold">
-                {statsLoading
-                  ? 'Загрузка...'
-                  : formatMoneyLike(stats?.totalPnL ?? '0')}
-              </p>
+        <Collapsible open={statsOpen} onOpenChange={setStatsOpen}>
+          <CardHeader className="py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-base">Статистика</CardTitle>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span>
+                    Доступно:{' '}
+                    <span className={getSignedClass(stats?.profitAvailable)}>
+                      {statsLoading
+                        ? '...'
+                        : formatMoneySmart(stats?.profitAvailable ?? '0')}
+                    </span>
+                  </span>
+                  <span>
+                    PnL:{' '}
+                    <span className={getSignedClass(stats?.totalPnL)}>
+                      {statsLoading
+                        ? '...'
+                        : formatMoneySmart(stats?.totalPnL ?? '0')}
+                    </span>
+                  </span>
+                </div>
+              </div>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="icon-sm">
+                  <ChevronDown
+                    className={cn(
+                      'h-4 w-4 transition-transform',
+                      statsOpen && 'rotate-180',
+                    )}
+                  />
+                </Button>
+              </CollapsibleTrigger>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Сделок (закрытые)</p>
-              <p className="text-lg font-semibold">
-                {statsLoading ? 'Загрузка...' : (stats?.tradesCount ?? 0)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">
-                Процент прибыльных
-              </p>
-              <p className="text-lg font-semibold">
-                {statsLoading ? 'Загрузка...' : formatWinRate(stats?.winRate)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Средний PnL</p>
-              <p className="text-lg font-semibold">
-                {statsLoading
-                  ? 'Загрузка...'
-                  : formatMoneyLike(stats?.avgPnL ?? '0')}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Комиссии</p>
-              <p className="text-lg font-semibold">
-                {statsLoading
-                  ? 'Загрузка...'
-                  : formatMoneyLike(stats?.feesTotal ?? '0')}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Открытых сделок</p>
-              <p className="text-lg font-semibold">
-                {statsLoading ? 'Загрузка...' : (stats?.openCount ?? 0)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Доступная прибыль</p>
-              <p className="text-lg font-semibold">
-                {statsLoading
-                  ? 'Загрузка...'
-                  : formatMoneyLike(stats?.profitAvailable ?? '0')}
-              </p>
-            </div>
-          </div>
-          {statsError && (
-            <p className="text-sm text-destructive">{statsError}</p>
-          )}
-        </CardContent>
+          </CardHeader>
+          <CollapsibleContent>
+            <CardContent className="space-y-3 pt-0">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Доступная прибыль
+                  </p>
+                  <p
+                    className={cn(
+                      'text-sm font-semibold',
+                      getSignedClass(stats?.profitAvailable),
+                    )}
+                  >
+                    {statsLoading
+                      ? 'Загрузка...'
+                      : formatMoneySmart(stats?.profitAvailable ?? '0')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Реализовано PnL
+                  </p>
+                  <p
+                    className={cn(
+                      'text-sm font-semibold',
+                      getSignedClass(stats?.totalRealizedPnl),
+                    )}
+                  >
+                    {statsLoading
+                      ? 'Загрузка...'
+                      : formatMoneySmart(stats?.totalRealizedPnl ?? '0')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Потрачено на реинвест
+                  </p>
+                  <p className="text-sm font-semibold text-muted-foreground">
+                    {statsLoading
+                      ? 'Загрузка...'
+                      : formatMoneySmart(stats?.totalProfitSpent ?? '0')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Общий PnL</p>
+                  <p
+                    className={cn(
+                      'text-sm font-semibold',
+                      getSignedClass(stats?.totalPnL),
+                    )}
+                  >
+                    {statsLoading
+                      ? 'Загрузка...'
+                      : formatMoneySmart(stats?.totalPnL ?? '0')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Комиссии</p>
+                  <p className="text-sm font-semibold text-muted-foreground">
+                    {statsLoading
+                      ? 'Загрузка...'
+                      : formatMoneySmart(stats?.feesTotal ?? '0')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Сделок (закрытые)
+                  </p>
+                  <p className="text-sm font-semibold">
+                    {statsLoading ? 'Загрузка...' : (stats?.tradesCount ?? 0)}
+                  </p>
+                </div>
+              </div>
+              {statsError && (
+                <p className="text-sm text-destructive">{statsError}</p>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
