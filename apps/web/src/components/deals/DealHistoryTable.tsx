@@ -62,6 +62,35 @@ const getTypeBadge = (type: DealHistoryEvent['type']) => {
   }
 }
 
+const getSourceBadge = (source: DealHistoryEvent['source']) => {
+  switch (source) {
+    case 'ORDER':
+      return (
+        <Badge variant="outline" className="text-blue-600">
+          Ордер
+        </Badge>
+      )
+    case 'IMPORT':
+      return (
+        <Badge variant="outline" className="text-purple-600">
+          Импорт
+        </Badge>
+      )
+    case 'SYSTEM':
+      return (
+        <Badge variant="outline" className="text-amber-600">
+          Система
+        </Badge>
+      )
+    default:
+      return (
+        <Badge variant="secondary" className="text-muted-foreground">
+          Вручную
+        </Badge>
+      )
+  }
+}
+
 const getSignedClass = (value?: string | number) => {
   if (value === undefined || value === null) {
     return 'text-muted-foreground'
@@ -89,6 +118,12 @@ export default function DealHistoryTable({ events }: DealHistoryTableProps) {
         header: 'Тип',
         cell: ({ row }: { row: Row<DealHistoryEvent> }) =>
           getTypeBadge(row.original.type),
+      },
+      {
+        accessorKey: 'source',
+        header: 'Источник',
+        cell: ({ row }: { row: Row<DealHistoryEvent> }) =>
+          getSourceBadge(row.original.source),
       },
       {
         accessorKey: 'qty',

@@ -6,6 +6,7 @@ import type {
 } from '@/types/deals'
 
 export type DealHistoryEventType = 'DCA' | 'PROFIT_REINVEST' | 'PARTIAL_CLOSE'
+export type DealHistorySource = 'ORDER' | 'IMPORT' | 'MANUAL' | 'SYSTEM'
 
 export type DealHistoryEvent = {
   id: string
@@ -18,7 +19,7 @@ export type DealHistoryEvent = {
   feeAsset?: string
   pnl?: string
   note?: string
-  source?: string
+  source: DealHistorySource
 }
 
 const toTimestamp = (value?: string) => {
@@ -27,10 +28,43 @@ const toTimestamp = (value?: string) => {
   return Number.isNaN(ts) ? null : ts
 }
 
+const normalizeAt = (value?: string) => {
+  const ts = toTimestamp(value)
+  if (ts === null) {
+    return new Date().toISOString()
+  }
+  return new Date(ts).toISOString()
+}
+
 const toNumber = (value?: string) => {
   if (value === undefined) return null
   const numeric = Number(value)
   return Number.isNaN(numeric) ? null : numeric
+}
+
+const inferSource = (payload: {
+  orderId?: number
+  source?: string
+  note?: string
+}): DealHistorySource => {
+  if (payload.orderId !== undefined) {
+    return 'ORDER'
+  }
+  if (payload.source && payload.source.toUpperCase() === 'BINANCE') {
+    return 'ORDER'
+  }
+  const note = payload.note?.toLowerCase() ?? ''
+  if (note.includes('import') || note.includes('импорт')) {
+    return 'IMPORT'
+  }
+  if (
+    note.includes('system') ||
+    note.includes('auto') ||
+    note.includes('систем')
+  ) {
+    return 'SYSTEM'
+  }
+  return 'MANUAL'
 }
 
 const sortByDateAsc = (a: { openedAt?: string }, b: { openedAt?: string }) => {
@@ -45,14 +79,14 @@ const buildDcaEvents = (entryLegs: DealEntryLeg[] = []) => {
   return sorted.slice(1).map((leg, index) => ({
     id: `DCA:${leg.openedAt}:${leg.orderId ?? index}`,
     type: 'DCA' as const,
-    at: leg.openedAt,
+    at: normalizeAt(leg.openedAt),
     qty: leg.qty,
     price: leg.price,
     quote: leg.quote,
     fee: leg.fee,
     feeAsset: leg.feeAsset,
     note: undefined,
-    source: leg.source,
+    source: inferSource({ orderId: leg.orderId, source: leg.source }),
   }))
 }
 
@@ -60,11 +94,12 @@ const buildProfitEvents = (profitOps: DealProfitOp[] = []) =>
   profitOps.map((op, index) => ({
     id: `PROFIT_REINVEST:${op.at}:${index}`,
     type: 'PROFIT_REINVEST' as const,
-    at: op.at,
+    at: normalizeAt(op.at),
     qty: op.qty,
     price: op.price,
     quote: op.amount,
     note: op.note,
+    source: inferSource({ note: op.note }),
   }))
 
 const computeExitPnl = (deal: Deal, leg: DealExitLeg, quoteValue?: string) => {
@@ -92,14 +127,14 @@ const buildExitEvents = (deal: Deal, exitLegs: DealExitLeg[] = []) =>
     return {
       id: `PARTIAL_CLOSE:${leg.closedAt}:${leg.orderId ?? index}`,
       type: 'PARTIAL_CLOSE' as const,
-      at: leg.closedAt,
+      at: normalizeAt(leg.closedAt),
       qty: leg.qty,
       price: leg.price,
       quote: quoteValue,
       fee: leg.fee,
       feeAsset: leg.feeAsset,
       pnl: computeExitPnl(deal, leg, quoteValue),
-      source: leg.source,
+      source: inferSource({ orderId: leg.orderId, source: leg.source }),
     }
   })
 
