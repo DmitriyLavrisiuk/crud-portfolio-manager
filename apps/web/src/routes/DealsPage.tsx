@@ -214,6 +214,24 @@ export default function DealsPage() {
 
   useEffect(() => {
     try {
+      const saved = localStorage.getItem('deals:history:expanded')
+      if (!saved) {
+        return
+      }
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed)) {
+        const ids = parsed.filter((value) => typeof value === 'string')
+        if (ids.length > 0) {
+          setExpandedRows(new Set(ids))
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
       localStorage.setItem('deals:stats:open', statsOpen ? '1' : '0')
     } catch {
       // ignore storage errors
@@ -340,6 +358,16 @@ export default function DealsPage() {
       return changed ? next : prev
     })
   }, [data])
+
+  useEffect(() => {
+    try {
+      const ids = Array.from(expandedRows)
+      const trimmed = ids.slice(-20)
+      localStorage.setItem('deals:history:expanded', JSON.stringify(trimmed))
+    } catch {
+      // ignore storage errors
+    }
+  }, [expandedRows])
 
   const handleEdit = useCallback((deal: Deal) => {
     setEditing(deal)

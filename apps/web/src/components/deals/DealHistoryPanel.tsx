@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import EmptyState from '@/components/ui/empty-state'
 import DealHistoryTable from '@/components/deals/DealHistoryTable'
 import type { DealHistoryEvent } from '@/lib/dealsHistory'
 
@@ -29,6 +31,7 @@ const isHistoryTab = (value: string): value is DealHistoryTab =>
 
 export default function DealHistoryPanel({ events }: DealHistoryPanelProps) {
   const [tab, setTab] = useState<DealHistoryTab>('all')
+  const [visibleCount, setVisibleCount] = useState(10)
 
   const filteredEvents = useMemo(() => {
     if (tab !== 'all') {
@@ -38,7 +41,19 @@ export default function DealHistoryPanel({ events }: DealHistoryPanelProps) {
     return events
   }, [events, tab])
 
-  const countLabel = formatCountLabel(filteredEvents.length, events.length)
+  useEffect(() => {
+    setVisibleCount(10)
+  }, [tab, events])
+
+  const visibleEvents = useMemo(
+    () => filteredEvents.slice(0, visibleCount),
+    [filteredEvents, visibleCount],
+  )
+
+  const countLabel = formatCountLabel(
+    visibleEvents.length,
+    filteredEvents.length,
+  )
 
   return (
     <div className="space-y-3">
@@ -67,13 +82,42 @@ export default function DealHistoryPanel({ events }: DealHistoryPanelProps) {
         </div>
         <TabsContent value={tab} className="space-y-3">
           {filteredEvents.length ? (
-            <div className="overflow-x-auto">
-              <DealHistoryTable events={filteredEvents} />
+            <div className="space-y-2">
+              <div className="overflow-x-auto">
+                <DealHistoryTable events={visibleEvents} />
+              </div>
+              {filteredEvents.length > 10 && (
+                <div className="flex items-center justify-start">
+                  {visibleCount < filteredEvents.length ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                      onClick={() =>
+                        setVisibleCount((prev) =>
+                          Math.min(prev + 10, filteredEvents.length),
+                        )
+                      }
+                    >
+                      Показать еще
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => setVisibleCount(10)}
+                    >
+                      Свернуть
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Нет операций по сделке.
-            </p>
+            <EmptyState title="Нет операций по выбранному фильтру" />
           )}
         </TabsContent>
       </Tabs>
