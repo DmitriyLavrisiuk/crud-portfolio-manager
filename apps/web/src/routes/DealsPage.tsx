@@ -7,9 +7,17 @@ import {
   type Header,
   type HeaderGroup,
   type Row,
+  type SortingState,
 } from '@tanstack/react-table'
 import { format } from 'date-fns'
-import { ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronRight,
+  SlidersHorizontal,
+} from 'lucide-react'
 import type { CheckedState } from '@radix-ui/react-checkbox'
 
 import { useAuth } from '@/auth/AuthProvider'
@@ -110,6 +118,54 @@ function normalizeSymbol(value: string) {
   return value.trim().toUpperCase()
 }
 
+function parseObjectIdTimestamp(id: string) {
+  if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+    return null
+  }
+  const seconds = Number.parseInt(id.slice(0, 8), 16)
+  if (!Number.isFinite(seconds)) {
+    return null
+  }
+  return seconds * 1000
+}
+
+function getDealTimestamp(deal: Deal) {
+  if (deal.createdAt) {
+    const created = Date.parse(deal.createdAt)
+    if (!Number.isNaN(created)) {
+      return created
+    }
+  }
+  if (deal.openedAt) {
+    const opened = Date.parse(deal.openedAt)
+    if (!Number.isNaN(opened)) {
+      return opened
+    }
+  }
+  const fallback = parseObjectIdTimestamp(deal.id)
+  return fallback ?? 0
+}
+
+const numericSort = (rowA: Row<Deal>, rowB: Row<Deal>, columnId: string) => {
+  const rawA = rowA.getValue(columnId)
+  const rawB = rowB.getValue(columnId)
+  const numA = Number(rawA)
+  const numB = Number(rawB)
+  const valA = Number.isNaN(numA) ? 0 : numA
+  const valB = Number.isNaN(numB) ? 0 : numB
+  return valA === valB ? 0 : valA > valB ? 1 : -1
+}
+
+const getAvailablePnlValue = (deal: Deal) => {
+  if (deal.realizedPnlAvailable !== undefined) {
+    return Number(deal.realizedPnlAvailable)
+  }
+  if (deal.realizedPnl && deal.profitSpentTotal) {
+    return Number(deal.realizedPnl) - Number(deal.profitSpentTotal)
+  }
+  return Number(deal.realizedPnl ?? 0)
+}
+
 export default function DealsPage() {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
@@ -130,6 +186,7 @@ export default function DealsPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [sorting, setSorting] = useState<SortingState>([])
   const [importing, setImporting] = useState<{
     deal: Deal
     phase: 'ENTRY' | 'EXIT'
@@ -190,6 +247,21 @@ export default function DealsPage() {
   })
 
   const data = useMemo(() => dealsQuery.data?.items ?? [], [dealsQuery.data])
+  const rankById = useMemo(() => {
+    const sorted = [...data].sort((left, right) => {
+      const leftTs = getDealTimestamp(left)
+      const rightTs = getDealTimestamp(right)
+      if (leftTs === rightTs) {
+        return left.id.localeCompare(right.id)
+      }
+      return leftTs - rightTs
+    })
+    const map = new Map<string, number>()
+    sorted.forEach((deal, index) => {
+      map.set(deal.id, index + 1)
+    })
+    return map
+  }, [data])
 
   useEffect(() => {
     const dataIds = new Set(data.map((deal) => deal.id))
@@ -322,6 +394,7 @@ export default function DealsPage() {
     () => [
       {
         id: 'select',
+        enableSorting: false,
         header: () => {
           const ids = data.map((deal) => deal.id)
           const allSelected =
@@ -384,9 +457,11 @@ export default function DealsPage() {
       {
         id: 'rowNumber',
         header: '#',
+        accessorFn: (row) => rankById.get(row.id) ?? 0,
+        sortingFn: numericSort,
         cell: ({ row }: { row: Row<Deal> }) => (
           <span className="font-mono text-xs text-muted-foreground">
-            {row.index + 1}
+            {rankById.get(row.original.id) ?? row.index + 1}
           </span>
         ),
         meta: {
@@ -396,7 +471,9 @@ export default function DealsPage() {
         },
       },
       {
-        accessorKey: 'openedAt',
+        id: 'openedAt',
+        accessorFn: (row) => Date.parse(row.openedAt ?? '') || 0,
+        sortingFn: numericSort,
         header: 'Открыта',
         cell: ({ row }: { row: Row<Deal> }) =>
           row.original.openedAt
@@ -459,12 +536,16 @@ export default function DealsPage() {
       },
       {
         id: 'entryQuote',
+        accessorFn: (row) => Number(row.entry?.quote ?? 0),
+        sortingFn: numericSort,
         header: 'Вход (quote)',
         cell: ({ row }: { row: Row<Deal> }) =>
           formatMoneyDisplay(row.original.entry?.quote),
       },
       {
-        accessorKey: 'entryAvgPrice',
+        id: 'entryAvgPrice',
+        accessorFn: (row) => Number(row.entryAvgPrice ?? row.entry?.price ?? 0),
+        sortingFn: numericSort,
         header: 'Средняя цена входа',
         cell: ({ row }: { row: Row<Deal> }) =>
           formatPriceDisplay(
@@ -472,25 +553,33 @@ export default function DealsPage() {
           ),
       },
       {
-        accessorKey: 'closedQty',
+        id: 'closedQty',
+        accessorFn: (row) => Number(row.closedQty ?? 0),
+        sortingFn: numericSort,
         header: 'Закрыто (qty)',
         cell: ({ row }: { row: Row<Deal> }) =>
           formatQtyDisplay(row.original.closedQty),
       },
       {
-        accessorKey: 'remainingQty',
+        id: 'remainingQty',
+        accessorFn: (row) => Number(row.remainingQty ?? 0),
+        sortingFn: numericSort,
         header: 'Остаток (qty)',
         cell: ({ row }: { row: Row<Deal> }) =>
           formatQtyDisplay(row.original.remainingQty),
       },
       {
         id: 'exitQuote',
+        accessorFn: (row) => Number(row.exit?.quote ?? 0),
+        sortingFn: numericSort,
         header: 'Выход (quote)',
         cell: ({ row }: { row: Row<Deal> }) =>
           formatMoneyDisplay(row.original.exit?.quote),
       },
       {
-        accessorKey: 'realizedPnl',
+        id: 'realizedPnl',
+        accessorFn: (row) => Number(row.realizedPnl ?? 0),
+        sortingFn: numericSort,
         header: 'PnL',
         cell: ({ row }: { row: Row<Deal> }) => (
           <span className={getSignedClass(row.original.realizedPnl)}>
@@ -499,7 +588,9 @@ export default function DealsPage() {
         ),
       },
       {
-        accessorKey: 'realizedPnlAvailable',
+        id: 'realizedPnlAvailable',
+        accessorFn: (row) => getAvailablePnlValue(row),
+        sortingFn: numericSort,
         header: 'Доступная прибыль',
         cell: ({ row }: { row: Row<Deal> }) => {
           const deal = row.original
@@ -528,6 +619,7 @@ export default function DealsPage() {
       },
       {
         id: 'actions',
+        enableSorting: false,
         header: 'Действия',
         cell: ({ row }: { row: Row<Deal> }) => (
           <div className="flex items-center justify-end gap-1">
@@ -586,6 +678,7 @@ export default function DealsPage() {
       data,
       selectedIds,
       expandedRows,
+      rankById,
       toggleExpandedRow,
       getSignedClass,
       setSelectedIds,
@@ -613,6 +706,8 @@ export default function DealsPage() {
   const table = useAppTable({
     data,
     columns,
+    state: { sorting },
+    onSortingChange: setSorting,
   })
 
   const handleApply = () => {
@@ -907,23 +1002,49 @@ export default function DealsPage() {
                     .map((headerGroup: HeaderGroup<Deal>) => (
                       <TableRow key={headerGroup.id}>
                         {headerGroup.headers.map(
-                          (header: Header<Deal, unknown>) => (
-                            <TableHead
-                              key={header.id}
-                              className={cn(
-                                'px-3 py-2 text-xs font-medium text-muted-foreground',
-                                header.column.columnDef.meta?.headerClassName,
-                                header.column.columnDef.meta?.sizeClassName,
-                              )}
-                            >
-                              {header.isPlaceholder
-                                ? null
-                                : flexRender(
-                                    header.column.columnDef.header,
-                                    header.getContext(),
-                                  )}
-                            </TableHead>
-                          ),
+                          (header: Header<Deal, unknown>) => {
+                            const canSort = header.column.getCanSort()
+                            const sortState = header.column.getIsSorted()
+                            return (
+                              <TableHead
+                                key={header.id}
+                                className={cn(
+                                  'px-3 py-2 text-xs font-medium text-muted-foreground',
+                                  header.column.columnDef.meta?.headerClassName,
+                                  header.column.columnDef.meta?.sizeClassName,
+                                )}
+                              >
+                                {header.isPlaceholder ? null : (
+                                  <div
+                                    className={cn(
+                                      'flex items-center gap-1',
+                                      canSort && 'cursor-pointer select-none',
+                                    )}
+                                    onClick={
+                                      canSort
+                                        ? header.column.getToggleSortingHandler()
+                                        : undefined
+                                    }
+                                  >
+                                    <span>
+                                      {flexRender(
+                                        header.column.columnDef.header,
+                                        header.getContext(),
+                                      )}
+                                    </span>
+                                    {canSort &&
+                                      (sortState === 'asc' ? (
+                                        <ArrowUp className="h-3 w-3 text-foreground" />
+                                      ) : sortState === 'desc' ? (
+                                        <ArrowDown className="h-3 w-3 text-foreground" />
+                                      ) : (
+                                        <ArrowUpDown className="h-3 w-3 text-muted-foreground/60" />
+                                      ))}
+                                  </div>
+                                )}
+                              </TableHead>
+                            )
+                          },
                         )}
                       </TableRow>
                     ))}

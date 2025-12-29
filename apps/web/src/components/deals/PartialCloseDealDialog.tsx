@@ -130,7 +130,7 @@ export default function PartialCloseDealDialog({
                     <Button
                       variant="outline"
                       className={cn(
-                        'justify-start text-left font-normal',
+                        'w-full justify-start text-left font-normal',
                         !form.watch('closedAt') && 'text-muted-foreground',
                       )}
                     >

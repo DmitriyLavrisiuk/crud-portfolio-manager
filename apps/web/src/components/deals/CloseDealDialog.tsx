@@ -122,7 +122,7 @@ export default function CloseDealDialog({
                     <Button
                       variant="outline"
                       className={cn(
-                        'justify-start text-left font-normal',
+                        'w-full justify-start text-left font-normal',
                         !form.watch('closedAt') && 'text-muted-foreground',
                       )}
                     >

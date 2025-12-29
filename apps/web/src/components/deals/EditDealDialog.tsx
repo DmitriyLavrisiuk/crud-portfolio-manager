@@ -175,7 +175,7 @@ export default function EditDealDialog({
                     <Button
                       variant="outline"
                       className={cn(
-                        'justify-start text-left font-normal',
+                        'w-full justify-start text-left font-normal',
                         !form.watch('openedAt') && 'text-muted-foreground',
                       )}
                     >

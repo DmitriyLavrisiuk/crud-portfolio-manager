@@ -1,5 +1,6 @@
 import {
   getCoreRowModel,
+  getSortedRowModel,
   type TableOptions,
   useReactTable,
 } from '@tanstack/react-table'
@@ -10,5 +11,6 @@ export function useAppTable<TData>(
   return useReactTable({
     ...options,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   })
 }

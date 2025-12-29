@@ -168,7 +168,7 @@ export default function ProfitToPositionDialog({
                   <Button
                     variant="outline"
                     className={cn(
-                      'justify-start text-left font-normal',
+                      'w-full justify-start text-left font-normal',
                       !form.watch('at') && 'text-muted-foreground',
                     )}
                   >
