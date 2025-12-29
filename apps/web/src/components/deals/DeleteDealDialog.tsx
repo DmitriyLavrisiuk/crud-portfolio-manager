@@ -19,6 +19,7 @@ type DeleteDealDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: (message: string) => void
+  onDeleted?: (id: string) => void
 }
 
 export default function DeleteDealDialog({
@@ -26,6 +27,7 @@ export default function DeleteDealDialog({
   open,
   onOpenChange,
   onSuccess,
+  onDeleted,
 }: DeleteDealDialogProps) {
   const { accessToken, refresh } = useAuth()
   const queryClient = useQueryClient()
@@ -40,10 +42,11 @@ export default function DeleteDealDialog({
         onUnauthorized: refresh,
       })
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
       onOpenChange(false)
+      onDeleted?.(result.id)
       onSuccess?.('Сделка удалена')
     },
   })

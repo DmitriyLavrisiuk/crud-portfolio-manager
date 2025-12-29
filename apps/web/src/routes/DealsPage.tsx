@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type Cell,
   type ColumnDef,
@@ -9,12 +9,16 @@ import {
   type Row,
 } from '@tanstack/react-table'
 import { format } from 'date-fns'
+import { SlidersHorizontal } from 'lucide-react'
+import type { CheckedState } from '@radix-ui/react-checkbox'
 
 import { useAuth } from '@/auth/AuthProvider'
-import { fetchDeals, fetchDealsStats } from '@/api/dealsApi'
+import { bulkDeleteDeals, fetchDeals, fetchDealsStats } from '@/api/dealsApi'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -57,6 +61,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 type FiltersState = {
   from: Date | null
@@ -92,12 +106,14 @@ function normalizeSymbol(value: string) {
 
 export default function DealsPage() {
   const { accessToken, refresh } = useAuth()
+  const queryClient = useQueryClient()
   const [notice, setNotice] = useState<string | null>(null)
   const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [draftFilters, setDraftFilters] =
     useState<FiltersState>(getDefaultFilters())
   const [appliedFilters, setAppliedFilters] =
     useState<FiltersState>(getDefaultFilters())
+  const [showFilters, setShowFilters] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [openWithOrderOpen, setOpenWithOrderOpen] = useState(false)
   const [editing, setEditing] = useState<Deal | null>(null)
@@ -107,6 +123,8 @@ export default function DealsPage() {
   const [profitToPosition, setProfitToPosition] = useState<Deal | null>(null)
   const [closingWithOrder, setClosingWithOrder] = useState<Deal | null>(null)
   const [deleting, setDeleting] = useState<Deal | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [importing, setImporting] = useState<{
     deal: Deal
     phase: 'ENTRY' | 'EXIT'
@@ -163,6 +181,25 @@ export default function DealsPage() {
 
   const data = useMemo(() => dealsQuery.data?.items ?? [], [dealsQuery.data])
 
+  useEffect(() => {
+    const dataIds = new Set(data.map((deal) => deal.id))
+    setSelectedIds((prev) => {
+      if (prev.size === 0) {
+        return prev
+      }
+      let changed = false
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (dataIds.has(id)) {
+          next.add(id)
+        } else {
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [data])
+
   const handleEdit = useCallback((deal: Deal) => {
     setEditing(deal)
   }, [])
@@ -195,13 +232,116 @@ export default function DealsPage() {
     setImporting({ deal, phase })
   }, [])
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async () => {
+      const ids = Array.from(selectedIds)
+      if (ids.length === 0) {
+        throw new Error('Нет выбранных сделок')
+      }
+      return bulkDeleteDeals(ids, {
+        accessToken,
+        onUnauthorized: refresh,
+      })
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['deals'] })
+      queryClient.invalidateQueries({ queryKey: ['dealsStats'] })
+      setSelectedIds((prev) => {
+        if (result.deletedIds.length === 0) {
+          return prev
+        }
+        const next = new Set(prev)
+        for (const id of result.deletedIds) {
+          next.delete(id)
+        }
+        return next
+      })
+      setBulkDeleteOpen(false)
+      showNotice(`Удалено сделок: ${result.deletedCount}`)
+    },
+  })
+
   const formatWinRate = useCallback((value?: number) => {
     if (value === undefined || Number.isNaN(value)) return '0%'
     return `${formatNum(value, { maxFrac: 2 })}%`
   }, [])
 
+  const getSignedClass = useCallback((value?: string | number) => {
+    if (value === undefined || value === null) {
+      return 'text-muted-foreground'
+    }
+    const numeric = Number(value)
+    if (Number.isNaN(numeric)) {
+      return 'text-muted-foreground'
+    }
+    if (numeric > 0) return 'text-emerald-600'
+    if (numeric < 0) return 'text-red-600'
+    return 'text-muted-foreground'
+  }, [])
+
   const columns = useMemo<ColumnDef<Deal>[]>(
     () => [
+      {
+        id: 'select',
+        header: () => {
+          const ids = data.map((deal) => deal.id)
+          const allSelected =
+            ids.length > 0 && ids.every((id) => selectedIds.has(id))
+          const someSelected =
+            ids.some((id) => selectedIds.has(id)) && !allSelected
+          const checked = allSelected
+            ? true
+            : someSelected
+              ? 'indeterminate'
+              : false
+
+          return (
+            <Checkbox
+              aria-label="Выбрать все сделки на странице"
+              checked={checked}
+              onCheckedChange={(value: CheckedState) => {
+                const nextChecked = value === true
+                setSelectedIds((prev) => {
+                  const next = new Set(prev)
+                  if (nextChecked) {
+                    for (const id of ids) {
+                      next.add(id)
+                    }
+                  } else {
+                    for (const id of ids) {
+                      next.delete(id)
+                    }
+                  }
+                  return next
+                })
+              }}
+            />
+          )
+        },
+        cell: ({ row }: { row: Row<Deal> }) => (
+          <Checkbox
+            aria-label="Выбрать сделку"
+            checked={selectedIds.has(row.original.id)}
+            onCheckedChange={(value: CheckedState) => {
+              const nextChecked = value === true
+              setSelectedIds((prev) => {
+                const next = new Set(prev)
+                if (nextChecked) {
+                  next.add(row.original.id)
+                } else {
+                  next.delete(row.original.id)
+                }
+                return next
+              })
+            }}
+          />
+        ),
+        meta: {
+          headerClassName: 'sticky left-0 z-30 bg-background text-xs',
+          cellClassName: 'sticky left-0 z-20 bg-background',
+          sizeClassName: 'w-10',
+        },
+      },
       {
         id: 'rowNumber',
         header: '#',
@@ -211,8 +351,8 @@ export default function DealsPage() {
           </span>
         ),
         meta: {
-          headerClassName: 'sticky left-0 z-30 bg-background text-xs',
-          cellClassName: 'sticky left-0 z-20 bg-background',
+          headerClassName: 'sticky left-10 z-30 bg-background text-xs',
+          cellClassName: 'sticky left-10 z-20 bg-background',
           sizeClassName: 'w-10',
         },
       },
@@ -224,8 +364,8 @@ export default function DealsPage() {
             ? new Date(row.original.openedAt).toLocaleDateString()
             : '-',
         meta: {
-          headerClassName: 'sticky left-10 z-30 bg-background text-xs',
-          cellClassName: 'sticky left-10 z-20 bg-background',
+          headerClassName: 'sticky left-[5rem] z-30 bg-background text-xs',
+          cellClassName: 'sticky left-[5rem] z-20 bg-background',
           sizeClassName: 'w-28',
         },
       },
@@ -234,11 +374,12 @@ export default function DealsPage() {
         header: 'Символ',
         cell: ({ getValue }: { getValue: () => unknown }) => {
           const value = getValue()
-          return typeof value === 'string' ? value : String(value ?? '')
+          const label = typeof value === 'string' ? value : String(value ?? '')
+          return <Badge variant="secondary">{label}</Badge>
         },
         meta: {
-          headerClassName: 'sticky left-[9.5rem] z-30 bg-background text-xs',
-          cellClassName: 'sticky left-[9.5rem] z-20 bg-background',
+          headerClassName: 'sticky left-[12rem] z-30 bg-background text-xs',
+          cellClassName: 'sticky left-[12rem] z-20 bg-background',
           sizeClassName: 'w-24',
         },
       },
@@ -256,8 +397,8 @@ export default function DealsPage() {
         cell: ({ getValue }: { getValue: () => unknown }) =>
           getValue() === 'OPEN' ? 'ОТКРЫТА' : 'ЗАКРЫТА',
         meta: {
-          headerClassName: 'sticky left-[15.5rem] z-30 bg-background text-xs',
-          cellClassName: 'sticky left-[15.5rem] z-20 bg-background',
+          headerClassName: 'sticky left-[18rem] z-30 bg-background text-xs',
+          cellClassName: 'sticky left-[18rem] z-20 bg-background',
           sizeClassName: 'w-24',
         },
       },
@@ -294,8 +435,11 @@ export default function DealsPage() {
       {
         accessorKey: 'realizedPnl',
         header: 'PnL',
-        cell: ({ row }: { row: Row<Deal> }) =>
-          formatMoneyLike(row.original.realizedPnl),
+        cell: ({ row }: { row: Row<Deal> }) => (
+          <span className={getSignedClass(row.original.realizedPnl)}>
+            {formatMoneyLike(row.original.realizedPnl)}
+          </span>
+        ),
       },
       {
         accessorKey: 'realizedPnlAvailable',
@@ -303,14 +447,26 @@ export default function DealsPage() {
         cell: ({ row }: { row: Row<Deal> }) => {
           const deal = row.original
           if (deal.realizedPnlAvailable !== undefined) {
-            return formatMoneyLike(deal.realizedPnlAvailable)
+            return (
+              <span className={getSignedClass(deal.realizedPnlAvailable)}>
+                {formatMoneyLike(deal.realizedPnlAvailable)}
+              </span>
+            )
           }
           if (deal.realizedPnl && deal.profitSpentTotal) {
             const value =
               Number(deal.realizedPnl) - Number(deal.profitSpentTotal)
-            return Number.isFinite(value) ? formatMoneyLike(value) : '-'
+            return (
+              <span className={getSignedClass(value)}>
+                {Number.isFinite(value) ? formatMoneyLike(value) : '-'}
+              </span>
+            )
           }
-          return formatMoneyLike(deal.realizedPnl)
+          return (
+            <span className={getSignedClass(deal.realizedPnl)}>
+              {formatMoneyLike(deal.realizedPnl)}
+            </span>
+          )
         },
       },
       {
@@ -347,6 +503,9 @@ export default function DealsPage() {
       handleCloseWithOrder,
       handleDelete,
       handleImport,
+      data,
+      selectedIds,
+      getSignedClass,
     ],
   )
 
@@ -355,6 +514,7 @@ export default function DealsPage() {
   const statsError =
     statsQuery.error instanceof Error ? statsQuery.error.message : null
 
+  const selectedCount = selectedIds.size
   const table = useAppTable({
     data,
     columns,
@@ -455,123 +615,140 @@ export default function DealsPage() {
             >
               Открыть через ордер
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters((prev) => !prev)}
+            >
+              <SlidersHorizontal className="mr-2 h-4 w-4" />
+              Фильтры
+            </Button>
+            {selectedCount > 0 && (
+              <Button
+                variant="destructive"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                Удалить ({selectedCount})
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex min-w-[180px] flex-col gap-2">
-              <Label>С</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      'justify-start text-left font-normal',
-                      !draftFilters.from && 'text-muted-foreground',
-                    )}
-                  >
-                    {draftFilters.from
-                      ? formatDateLabel(draftFilters.from)
-                      : 'Выберите дату'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={draftFilters.from ?? undefined}
-                    onSelect={(date: Date | undefined) =>
-                      setDraftFilters((prev) => ({
-                        ...prev,
-                        from: date ?? null,
-                      }))
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+          {showFilters && (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex min-w-[180px] flex-col gap-2">
+                <Label>С</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'justify-start text-left font-normal',
+                        !draftFilters.from && 'text-muted-foreground',
+                      )}
+                    >
+                      {draftFilters.from
+                        ? formatDateLabel(draftFilters.from)
+                        : 'Выберите дату'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={draftFilters.from ?? undefined}
+                      onSelect={(date: Date | undefined) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          from: date ?? null,
+                        }))
+                      }
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="flex min-w-[180px] flex-col gap-2">
+                <Label>По</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'justify-start text-left font-normal',
+                        !draftFilters.to && 'text-muted-foreground',
+                      )}
+                    >
+                      {draftFilters.to
+                        ? formatDateLabel(draftFilters.to)
+                        : 'Выберите дату'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={draftFilters.to ?? undefined}
+                      onSelect={(date: Date | undefined) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          to: date ?? null,
+                        }))
+                      }
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="flex min-w-[180px] flex-1 flex-col gap-2">
+                <Label>Символ</Label>
+                <Input
+                  placeholder="Символ"
+                  value={draftFilters.symbol}
+                  onChange={(event) =>
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      symbol: event.target.value.toUpperCase(),
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex min-w-[180px] flex-col gap-2">
+                <Label>Статус</Label>
+                <Select
+                  value={draftFilters.status}
+                  onValueChange={(value) =>
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      status: value as FiltersState['status'],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Статус" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Все</SelectItem>
+                    <SelectItem value="OPEN">Открытые</SelectItem>
+                    <SelectItem value="CLOSED">Закрытые</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="inline-flex">
+                <Button
+                  variant="secondary"
+                  className="rounded-r-none"
+                  onClick={handleApply}
+                >
+                  Применить
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-l-none border-l-0"
+                  onClick={handleReset}
+                >
+                  Сбросить
+                </Button>
+              </div>
             </div>
-            <div className="flex min-w-[180px] flex-col gap-2">
-              <Label>По</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      'justify-start text-left font-normal',
-                      !draftFilters.to && 'text-muted-foreground',
-                    )}
-                  >
-                    {draftFilters.to
-                      ? formatDateLabel(draftFilters.to)
-                      : 'Выберите дату'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={draftFilters.to ?? undefined}
-                    onSelect={(date: Date | undefined) =>
-                      setDraftFilters((prev) => ({
-                        ...prev,
-                        to: date ?? null,
-                      }))
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="flex min-w-[180px] flex-1 flex-col gap-2">
-              <Label>Символ</Label>
-              <Input
-                placeholder="Символ"
-                value={draftFilters.symbol}
-                onChange={(event) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    symbol: event.target.value.toUpperCase(),
-                  }))
-                }
-              />
-            </div>
-            <div className="flex min-w-[180px] flex-col gap-2">
-              <Label>Статус</Label>
-              <Select
-                value={draftFilters.status}
-                onValueChange={(value) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    status: value as FiltersState['status'],
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Статус" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Все</SelectItem>
-                  <SelectItem value="OPEN">Открытые</SelectItem>
-                  <SelectItem value="CLOSED">Закрытые</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="inline-flex">
-              <Button
-                variant="secondary"
-                className="rounded-r-none"
-                onClick={handleApply}
-              >
-                Применить
-              </Button>
-              <Button
-                variant="outline"
-                className="rounded-l-none border-l-0"
-                onClick={handleReset}
-              >
-                Сбросить
-              </Button>
-            </div>
-          </div>
+          )}
 
           {notice && (
             <p className="text-sm text-emerald-600" role="status">
@@ -709,7 +886,43 @@ export default function DealsPage() {
         open={Boolean(deleting)}
         onOpenChange={(open) => (!open ? setDeleting(null) : null)}
         onSuccess={showNotice}
+        onDeleted={(id) =>
+          setSelectedIds((prev) => {
+            if (!prev.has(id)) {
+              return prev
+            }
+            const next = new Set(prev)
+            next.delete(id)
+            return next
+          })
+        }
       />
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить сделки?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Будет удалено: {selectedCount}. Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {bulkDeleteMutation.error instanceof Error && (
+            <p className="text-sm text-destructive">
+              {bulkDeleteMutation.error.message}
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleteMutation.isPending}>
+              Отмена
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => bulkDeleteMutation.mutate()}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? 'Удаляем...' : 'Удалить'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {importing && (
         <ImportTradesDialog
           open={Boolean(importing)}

@@ -384,7 +384,7 @@ export class DealsService {
       source: 'MANUAL',
     })
 
-    this.addEntryLeg(deal, entryLeg, { preserveRealizedPnl: true })
+    this.addEntryLeg(deal, entryLeg)
 
     if (!deal.profitOps) {
       deal.profitOps = []
@@ -656,7 +656,34 @@ export class DealsService {
   }
 
   async deleteByIdForUser(userId: string, id: string) {
-    return this.dealModel.findOneAndDelete({ _id: id, userId })
+    const deal = await this.dealModel.findById(id)
+    if (!deal) {
+      return null
+    }
+    if (String(deal.userId) !== userId) {
+      return null
+    }
+    await deal.deleteOne()
+    return String(deal._id)
+  }
+
+  async bulkDeleteForUser(userId: string, ids: string[]) {
+    if (ids.length === 0) {
+      throw new BadRequestException('ids must not be empty')
+    }
+    const deals = await this.dealModel
+      .find({ _id: { $in: ids }, userId }, { _id: 1 })
+      .lean()
+    const deletableIds = deals.map((deal) => String(deal._id))
+    if (deletableIds.length === 0) {
+      return { ok: true, deletedCount: 0, deletedIds: [] }
+    }
+    await this.dealModel.deleteMany({ _id: { $in: deletableIds }, userId })
+    return {
+      ok: true,
+      deletedCount: deletableIds.length,
+      deletedIds: deletableIds,
+    }
   }
 
   private computeQuote(qty: string, price: string) {
@@ -936,7 +963,7 @@ export class DealsService {
 
   private updateRealizedAvailable(deal: DealDocument) {
     const available = this.getRealizedAvailable(deal)
-    deal.realizedPnlAvailable = available.toString()
+    deal.realizedPnlAvailable = available.lt(0) ? '0' : available.toString()
   }
 
   private async getUserProfitBalance(userId: string) {

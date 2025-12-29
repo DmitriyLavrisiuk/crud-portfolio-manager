@@ -214,8 +214,21 @@ export async function profitToPosition(
 }
 
 export async function deleteDeal(id: string, auth: AuthOptions) {
-  return apiFetch<{ ok: true }>(`/deals/${id}`, {
+  return apiFetch<{ ok: true; id: string }>(`/deals/${id}`, {
     method: 'DELETE',
+    accessToken: auth.accessToken,
+    onUnauthorized: auth.onUnauthorized,
+  })
+}
+
+export async function bulkDeleteDeals(ids: string[], auth: AuthOptions) {
+  return apiFetch<{
+    ok: true
+    deletedCount: number
+    deletedIds: string[]
+  }>(`/deals/bulk-delete`, {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
     accessToken: auth.accessToken,
     onUnauthorized: auth.onUnauthorized,
   })

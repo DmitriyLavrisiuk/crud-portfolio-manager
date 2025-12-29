@@ -109,6 +109,9 @@ export default function ProfitToPositionDialog({
             <p className="text-xs text-muted-foreground">
               Сумма будет учтена как новый вход (DCA) без отправки ордера.
             </p>
+            <p className="text-xs text-muted-foreground">
+              Расчёт PnL выполнен от средней цены входа.
+            </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">

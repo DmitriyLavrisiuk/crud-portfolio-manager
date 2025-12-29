@@ -161,6 +161,10 @@ export const importTradesSchema = z
     }
   })
 
+export const bulkDeleteDealsSchema = z.object({
+  ids: z.array(z.string().trim().min(1)).min(1),
+})
+
 export type CreateDealDto = z.infer<typeof createDealSchema>
 export type UpdateDealDto = z.infer<typeof updateDealSchema>
 export type CloseDealDto = z.infer<typeof closeDealSchema>
@@ -172,3 +176,4 @@ export type DealsStatsQuery = z.infer<typeof dealsStatsSchema>
 export type OpenDealWithOrderDto = z.infer<typeof openDealWithOrderSchema>
 export type CloseDealWithOrderDto = z.infer<typeof closeDealWithOrderSchema>
 export type ImportTradesDto = z.infer<typeof importTradesSchema>
+export type BulkDeleteDealsDto = z.infer<typeof bulkDeleteDealsSchema>

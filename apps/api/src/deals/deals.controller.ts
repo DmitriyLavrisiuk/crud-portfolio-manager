@@ -21,6 +21,7 @@ import {
   closeDealWithOrderSchema,
   createDealSchema,
   addEntryLegSchema,
+  bulkDeleteDealsSchema,
   dealsStatsSchema,
   importTradesSchema,
   listDealsSchema,
@@ -29,6 +30,7 @@ import {
   profitToPositionSchema,
   updateDealSchema,
   type AddEntryLegDto,
+  type BulkDeleteDealsDto,
   type CloseDealDto,
   type CloseDealWithOrderDto,
   type CreateDealDto,
@@ -233,11 +235,21 @@ export class DealsController {
   @Delete(':id')
   async deleteDeal(@Req() req: Request, @Param('id') id: string) {
     const user = req.user as { id: string }
-    const deleted = await this.dealsService.deleteByIdForUser(user.id, id)
-    if (!deleted) {
+    const deletedId = await this.dealsService.deleteByIdForUser(user.id, id)
+    if (!deletedId) {
       throw new NotFoundException('Deal not found')
     }
-    return { ok: true }
+    return { ok: true, id: deletedId }
+  }
+
+  @Post('bulk-delete')
+  async bulkDeleteDeals(
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(bulkDeleteDealsSchema))
+    body: BulkDeleteDealsDto,
+  ) {
+    const user = req.user as { id: string }
+    return this.dealsService.bulkDeleteForUser(user.id, body.ids)
   }
 
   private mapDeal(deal: HydratedDocument<Deal> | (Deal & { _id: unknown })) {
